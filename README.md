@@ -4,10 +4,10 @@
 ---
 
 ### Integrantes da Equipe
-* ** Fellipe Augusto - 2401525**
-* ** Gabriel Muchon - 2401895**
-* ** Paloma Eduarda - 2401660**
-* ** Victor Wenzel - 2401698**
+* [Fellipe Augusto - 2401525]
+* [Gabriel Muchon - 2401895]
+* [Paloma Eduarda - 2401660]
+* [Victor Wenzel - 2401698]
 
 ---
 
