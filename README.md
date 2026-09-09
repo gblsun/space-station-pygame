@@ -1,14 +1,30 @@
-# space-station-pygame
+# Projeto AP1 — Computação Gráfica e RA/RV
+## Mundo Virtual Animado: Base Espacial e Campo de Asteroides
 
-Repositório da disciplina **Computação Gráfica e RA/RV** (Faculdade Impacta), usado para organizar o material de aula e o desenvolvimento do projeto avaliativo **AP1 — Mundo Virtual Animado**, variação **Estação Espacial**.
+---
 
-## Estrutura
+### Integrantes da Equipe
+* ** Fellipe Augusto - 2401525**
+* ** Gabriel Muchon - 2401895**
+* ** Paloma Eduarda - 2401660**
+* ** Victor Wenzel - 2401698**
 
-- **[Atividade AP1/](Atividade%20AP1/)** — enunciado oficial da atividade avaliativa (PDF) e um resumo em README para consulta rápida dos requisitos, etapas e critérios de avaliação.
-- **[Materiais de aula/](Materiais%20de%20aula/)** — slides das aulas e exercícios práticos de apoio, organizados em subpastas `Aulas/` e `Exercicios/`.
+---
 
-## Sobre o projeto AP1
+### 1. Visão Geral do Projeto
+Este projeto consiste na implementação de um ambiente virtual tridimensional animado e interativo desenvolvido inteiramente em **Python** com **Pygame**, sem a utilização de OpenGL, motores 3D comerciais ou bibliotecas externas de modelagem (atendendo à restrição didática do enunciado).
 
-A atividade pede a construção de um "mundo virtual animado" em Python + Pygame (sem OpenGL, motores 3D ou bibliotecas externas de modelagem), com objetos instanciados, transformações, câmera com múltiplos modos, animações por estado e uma interface com comandos discretos de teclado. A variação temática deste repositório é a **Estação Espacial** (Equipe 2 da atividade): acoplamento de módulos, trajetória orbital de robôs, portas com estados e alerta sequencial.
+A aplicação renderiza uma cena espacial composta por uma base de lançamento com torre de suporte monolítica, um foguete aeroespacial composto, um corpo celeste esférico (Lua) e um cinturão de três asteroides instanciados com variação de parâmetros, além de um campo estelar dinâmico em profundidade. Toda a projeção tridimensional, sombreamento, oclusão, descarte de superfícies e traçado de raio foram calculados analiticamente através de matemática vetorial pura.
 
-Veja o resumo completo dos requisitos em [Atividade AP1/README.md](Atividade%20AP1/README.md).
+---
+
+### 2. Instruções de Execução
+
+#### Pré-requisitos
+* **Python 3.10** ou superior instalado.
+* Biblioteca **Pygame** instalada.
+
+#### Instalação das Dependências
+No terminal ou prompt de comando, execute:
+```bash
+pip install pygame
