@@ -16,7 +16,7 @@ clock = pygame.time.Clock()
 font_hud = pygame.font.SysFont("Consolas", 14)
 font_title = pygame.font.SysFont("Consolas", 18, bold=True)
 
-# --- MATEMÁTICA VETORIAL NATIVA ---
+# --- MATEMÁTICA VETORIAL ---
 def vec_sub(a, b): return (a[0]-b[0], a[1]-b[1], a[2]-b[2])
 def vec_add(a, b): return (a[0]+b[0], a[1]+b[1], a[2]+b[2])
 def vec_scale(v, s): return (v[0]*s, v[1]*s, v[2]*s)
@@ -54,7 +54,7 @@ def rotate_y(point, angle_deg):
     x, y, z = point
     return (x * c + z * s, y, -x * s + z * c)
 
-# --- MALHA POLIGONAL COM SHADING E CULLING ---
+# --- MALHA POLIGONAL ---
 class PolyMesh:
     def __init__(self, vertices, faces, base_color, position=(0, 0, 0), double_sided=False):
         self.base_vertices = vertices
@@ -245,7 +245,7 @@ class Starfield:
 
 starfield = Starfield()
 
-# --- FSM E CÂMERA ---
+# --- CÂMERA ---
 STATE_PARADO = "PARADO"
 STATE_EXECUTANDO = "EXECUTANDO"
 STATE_PAUSADO = "PAUSADO"
@@ -416,7 +416,7 @@ while running:
         credits_text = [
             "TELA DE CRÉDITOS & ARQUITETURA GRÁFICA",
             "----------------------------------------------------------------",
-            "Tema: Base de Lançamento Espacial e Asteroides (Pipeline 3D)",
+            "Tema: Estação Espacial (Pipeline 3D)",
             "Equipe: Fellipe Augusto, Gabriel Muchon, Paloma Eduarda e Victor Wenzel",
             "",
             "Conceitos de Computação Gráfica Aplicados:",
