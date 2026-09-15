@@ -23,10 +23,11 @@
 
 ## Bloco 2 · Modelagem e composição — 1 min 30 — *Gabriel (modelagem)*
 
-- Apertar `H` para abrir o painel de dados e mostrar a contagem de faces.
-- Percorrer o requisito 3 apontando na tela: os **quatro robôs** como instâncias do
-  mesmo tipo com parâmetros diferentes, o **planeta** como objeto sem partes e o
-  **núcleo** como objeto composto.
+- Apertar `H` para abrir o painel de dados e mostrar a contagem de faces e o FPS medido.
+- Apertar `N` para ligar os rótulos e percorrer o requisito 3 apontando na tela: os
+  **quatro robôs** (MR-1 a MR-4) como instâncias do mesmo tipo com parâmetros
+  diferentes, a **Terra** e a **Lua** como objetos sem partes e o **núcleo** como
+  objeto composto. Desligar com `N` antes do bloco 3.
 - Mostrar `A` e `D` para dar a leitura de profundidade da estrutura.
 - Explicar que a geometria é procedural: o `MeshBuilder` monta caixas, prismas,
   treliças, painéis em grade e antenas, e cada detrito nasce de uma semente própria.
@@ -46,6 +47,8 @@
 - Passar por `C`, `W`, `S`, `A`, `D` e terminar em `F`, o **foco animado** que
   acompanha o cargueiro — exatamente o que o requisito 5 pede.
 - Apontar que a troca é interpolada, não é corte seco.
+- Opcional: `T` liga o tour, que troca de câmera sozinho a cada fase — útil para
+  narrar sem ninguém no teclado. Qualquer tecla de câmera desliga.
 - Mostrar o HUD: título, estado, fase, comporta, balizas, câmera, sensor, comandos e a
   barra de progresso com as marcas de troca de fase.
 - Ir para a fase 4 e esperar uma linha do sensor ficar **vermelha**: explicar que é

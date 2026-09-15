@@ -27,8 +27,8 @@ A cena mostra a estação orbital **Órbita-2** recebendo o cargueiro **Vega-7**
 o núcleo com painéis solares em grade, radiadores, treliça de antena e propulsores
 de atitude; um módulo-laboratório acoplado por túnel; uma comporta de doca com
 máquina de estados própria; seis balizas de alerta em rodízio; quatro robôs de
-manutenção com braço articulado de dois segmentos; um cinturão de nove detritos;
-um satélite em órbita alta e um planeta ao fundo — 28 malhas ao todo.
+manutenção com braço articulado de dois segmentos; um cinturão de nove detritos e
+três satélites em órbita da Terra; e a própria Terra, a Lua e o Sol — 32 malhas ao todo.
 
 Todo o pipeline gráfico é calculado analiticamente com matemática vetorial pura:
 transformações de modelo, câmera look-at, recorte no plano próximo, projeção em
@@ -66,7 +66,15 @@ A janela abre em `1080x720` a 60 FPS, com a simulação parada até o primeiro
 | `W` / `S` | Câmera — visão superior / inferior |
 | `A` / `D` | Câmera — flanco esquerdo / direito |
 | `F` | Câmera — foco animado, acompanha o cargueiro |
-| `H` | Painel de dados do pipeline |
+| `T` | Tour de câmera: um enquadramento por fase (qualquer tecla de câmera desliga) |
+| `Z` / `X` | Enquadramento — aproximar / afastar (doca, estação, órbita baixa, Terra e Lua, sistema) |
+| `+` / `-` | Velocidade da simulação, de 0,25x a 3x |
+| `L` | Repetir a sequência sem parar |
+| `O` | Órbita de inspeção estendida, com cerca de três voltas dos robôs |
+| `B` | Mostrar / ocultar o traçado das órbitas |
+| `N` | Rótulos dos objetos, com o papel de cada um no requisito 3 |
+| `H` | Painel de dados: FPS medido, custo do quadro e pipeline |
+| `F12` | Captura de tela, salva em `docs/img` |
 | `TAB` | Tela de créditos |
 | `ESC` | Encerrar |
 

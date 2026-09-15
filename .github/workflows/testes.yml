@@ -1,0 +1,33 @@
+# Roda a suíte do AP1 sem janela a cada push e pull request.
+# A matriz cobre os dois ramos do requirements.txt: pygame (até 3.13) e pygame-ce (3.14+).
+name: Testes
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.14"]
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Instalar dependências
+        run: pip install -r "Atividade AP1/requirements.txt"
+
+      - name: Suíte de testes
+        run: python -m unittest discover -s "Atividade AP1" -p "test_*.py" -v
+
+      - name: Roteiro do checklist
+        run: python "Atividade AP1/test_ap1.py" --smoke

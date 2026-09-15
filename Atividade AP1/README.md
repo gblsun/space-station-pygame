@@ -66,7 +66,15 @@ No Python 3.14 o `pygame` clássico não tem wheel e falha ao compilar; use
 | `W` / `S` | Câmera — visão superior / inferior |
 | `A` / `D` | Câmera — flanco esquerdo / direito |
 | `F` | Câmera — foco animado, acompanha o cargueiro |
-| `H` | Painel de dados do pipeline (faces, culling, câmera) |
+| `T` | Tour de câmera: um enquadramento por fase (qualquer tecla de câmera desliga) |
+| `Z` / `X` | Enquadramento — aproximar / afastar (doca, estação, órbita baixa, Terra e Lua, sistema) |
+| `+` / `-` | Velocidade da simulação, de 0,25x a 3x |
+| `L` | Repetir a sequência sem parar |
+| `O` | Órbita de inspeção estendida, com cerca de três voltas dos robôs |
+| `B` | Mostrar / ocultar o traçado das órbitas |
+| `N` | Rótulos dos objetos, com o papel de cada um no requisito 3 |
+| `H` | Painel de dados: FPS medido, custo do quadro, faces, culling e câmera |
+| `F12` | Captura de tela, salva em `docs/img` |
 | `TAB` | Tela de créditos |
 | `ESC` | Encerrar |
 
@@ -90,9 +98,9 @@ Mapa direto do §3 do enunciado para o código, para consulta durante a apresent
 |---|---|---|
 | 1 | Janela, laço, FPS, Δt, encerramento | `App.run()` — `WIDTH/HEIGHT/FPS`, `clock.tick(FPS)`, `dt` limitado a 50 ms contra engasgos, saída por `ESC`/fechar janela e `pygame.quit()` |
 | 2 | ≥3 tipos de primitivas | Polígonos (faces das malhas), círculos (partículas e balizas), linhas (raios do sensor), pontos (campo estelar, `set_at`), retângulos e texto (HUD) — 6 tipos |
-| 3 | ≥5 objetos, com 3 instâncias, 1 sem partes e 1 composto | 28 malhas. **4 instâncias:** robôs MR-1 a MR-4, com escala, cor, raio orbital, velocidade e fase diferentes. **Sem partes:** Planeta Kaltus, esfera única. **Compostos:** Núcleo Órbita-2 (casco, colares, anel de doca, 2 painéis solares em grade, radiadores, treliça de antena, escotilhas, propulsores e antena parabólica), Módulo Laboratório e Cargueiro Vega-7 |
-| 4 | Translação, rotação e escala, com duas variando na animação | **Translação:** cargueiro, robôs e detritos. **Rotação:** núcleo, detritos (3 eixos), planeta, satélite, robôs e as juntas dos braços. **Escala:** pulsação do cargueiro na fase 2 e escalas distintas por robô. As três variam durante a sequência |
-| 5 | Câmera com ≥2 modos alternados por tecla | `Camera` com 5 presets fixos (`C W S A D`) mais o **foco animado** `F`, que acompanha o cargueiro quadro a quadro; toda troca é interpolada por `lerp`, não é corte seco |
+| 3 | ≥5 objetos, com 3 instâncias, 1 sem partes e 1 composto | 32 malhas. **4 instâncias:** robôs MR-1 a MR-4, com escala, cor, raio orbital, velocidade e fase diferentes. **Sem partes:** Terra e Lua, cada uma uma esfera única. **Compostos:** Núcleo Órbita-2 (casco, colares, anel de doca, 2 painéis solares em grade, radiadores, treliça de antena, escotilhas, propulsores e antena parabólica), Módulo Laboratório e Cargueiro Vega-7. A tecla `N` rotula cada objeto com o seu papel |
+| 4 | Translação, rotação e escala, com duas variando na animação | **Translação:** cargueiro, robôs, detritos, satélites, Terra e Lua. **Rotação:** detritos (3 eixos), Terra, Lua, Sol, satélites, robôs e as juntas dos braços. **Escala:** pulsação do cargueiro na fase 2 e escalas distintas por robô. As três variam durante a sequência |
+| 5 | Câmera com ≥2 modos alternados por tecla | `Camera` com 5 presets fixos (`C W S A D`), o **foco animado** `F`, que acompanha o cargueiro quadro a quadro, e o **tour** `T`, que troca de enquadramento a cada fase. Toda troca é interpolada sobre o deslocamento em relação à âncora, não é corte seco |
 | 6 | ≥3 animações: espacial, por estados e sequência com 2+ objetos | **Espacial:** aproximação e acoplamento do cargueiro (`_animate_cargo`). **Por estados:** `DoorFSM` (`FECHADA → ABRINDO → ABERTA → FECHANDO`) aninhada na FSM geral. **Sequência com 2+ objetos:** acoplamento coordenando cargueiro, comporta e balizas, e a órbita dos 4 robôs com evitação do mastro |
 | 7 | Comandos discretos documentados | `App.handle_event` — só `KEYDOWN`; tabela de teclas acima |
 | 8 | Interface com título, comandos, estado, etapa e progresso | `Hud._draw_main` e `Hud._draw_footer`: título, estado da FSM, fase atual, estado da comporta, balizas, câmera, leitura do sensor, comandos e barra de progresso com marcas das trocas de fase |

@@ -10,6 +10,7 @@ no plano próximo e o teste de interseção raio-esfera.
 import math
 import os
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -126,6 +127,27 @@ class TestCamera(unittest.TestCase):
         for atual, meta in zip(cam.eye, cam.eye_goal):
             self.assertAlmostEqual(atual, meta, delta=1.0)
         self.assertNotEqual(inicio, list(cam.eye))
+
+    def test_camera_nao_fica_para_tras_de_ancora_em_movimento(self):
+        """Regressão: com lerp absoluto a câmera ficava ~115 unidades atrás da estação."""
+        cam = ap1.Camera("geral")
+        ancora = list(ap1.STATION_ORIGIN)
+        for _ in range(120):
+            ancora[0] += 545.0 / 60.0          # velocidade orbital da Terra
+            cam.set_anchor(ancora, fonte="station")
+            cam.update(1.0 / 60.0)
+        for eixo in range(3):
+            self.assertAlmostEqual(cam.eye[eixo] - ancora[eixo],
+                                   cam.eye_offset[eixo] * cam.zoom, delta=1.0)
+
+    def test_troca_de_ancora_nao_salta(self):
+        cam = ap1.Camera("geral")
+        cam.set_anchor(ap1.STATION_ORIGIN, fonte="station")
+        cam.update(1.0 / 60.0)
+        antes = list(cam.eye)
+        cam.set_anchor(ap1.vec_add(ap1.STATION_ORIGIN, (1400.0, 0.0, 0.0)), fonte="earth")
+        cam.update(1.0 / 60.0)
+        self.assertLess(ap1.length(ap1.vec_sub(cam.eye, antes)), 1400.0 * 0.2)
 
 
 class TestRecorteNear(unittest.TestCase):
@@ -598,6 +620,73 @@ class TestRoteiroDoChecklist(unittest.TestCase):
             self.tecla(key)
             self.assertEqual(self.app.scene.phase_index, numero - 1)
 
+    def test_step_publica_medicao_de_desempenho(self):
+        for _ in range(40):                    # 40 quadros de 1/60 s passam de meio segundo
+            self.app.step(1.0 / 60.0)
+        self.assertIsNotNone(self.app.desempenho)
+        _fps, cpu_ms = self.app.desempenho
+        self.assertGreater(cpu_ms, 0.0)
+
+    def test_painel_de_dados_mostra_fps_e_custo_do_quadro(self):
+        hud = self.app.hud
+        hud.show_debug = True
+        hud.draw(self.app.screen, self.app.scene, self.app.renderer, (60.0, 9.5))
+        textos = [chave[1] for chave in hud._texto_cache]
+        self.assertTrue(any(t.startswith("FPS medido") and t.endswith("60") for t in textos))
+        self.assertTrue(any(t.startswith("quadro (CPU)") and "9.5 ms" in t for t in textos))
+
+    def test_rotulos_classificam_os_objetos_do_requisito_3(self):
+        textos = [texto for texto, _pos in self.app.scene.label_targets()]
+        self.assertEqual(sum(1 for t in textos if t.endswith("instância")), 4)
+        self.assertTrue(any(t.endswith("sem partes") for t in textos))
+        self.assertTrue(any(t.endswith("composto") for t in textos))
+
+    def test_tecla_n_alterna_rotulos(self):
+        self.assertFalse(self.app.hud.show_labels)
+        self.tecla(pygame.K_n)
+        self.assertTrue(self.app.hud.show_labels)
+        self.tecla(pygame.K_n)
+        self.assertFalse(self.app.hud.show_labels)
+
+    def test_rotulos_ligados_aparecem_na_fase_4(self):
+        self.tecla(pygame.K_4)
+        self.tecla(pygame.K_n)
+        for _ in range(30):
+            self.app.step(1.0 / 60.0)
+        self.assertGreaterEqual(self.app.hud.rotulos_desenhados, 4)
+
+    def test_tour_escolhe_a_camera_de_cada_fase(self):
+        self.tecla(pygame.K_t)
+        self.assertTrue(self.app.scene.tour)
+        for fase in range(1, 5):
+            self.app.scene.goto_phase(fase)
+            self.app.scene.update(1.0 / 60.0)
+            self.assertEqual(self.app.scene.camera.key, ap1.TOUR_CAMERAS[fase - 1], msg=fase)
+
+    def test_tecla_de_camera_desliga_o_tour(self):
+        self.tecla(pygame.K_t)
+        self.tecla(pygame.K_c)
+        self.assertFalse(self.app.scene.tour)
+        self.assertEqual(self.app.scene.camera.key, "geral")
+        self.tecla(pygame.K_t)
+        self.tecla(pygame.K_f)
+        self.assertFalse(self.app.scene.tour)
+
+    def test_tour_continua_ligado_depois_do_reset(self):
+        self.tecla(pygame.K_t)
+        self.tecla(pygame.K_r)
+        self.assertTrue(self.app.scene.tour)
+
+    def test_captura_de_tela_grava_png_do_tamanho_da_janela(self):
+        self.app.step(1.0 / 60.0)
+        with tempfile.TemporaryDirectory() as pasta:
+            caminho = self.app.save_screenshot(pasta)
+            self.assertTrue(os.path.isfile(caminho))
+            self.assertEqual(pygame.image.load(caminho).get_size(), (ap1.WIDTH, ap1.HEIGHT))
+            segunda = self.app.save_screenshot(pasta)
+            self.assertNotEqual(caminho, segunda)      # mesmo segundo não sobrescreve
+        self.assertGreater(self.app.hud._aviso_restante, 0)
+
     def test_creditos_e_painel_de_dados(self):
         self.tecla(pygame.K_TAB)
         self.assertTrue(self.app.hud.show_credits)
@@ -745,10 +834,13 @@ class TestFrustumCulling(unittest.TestCase):
         poly = [(10, 10), (200, 10), (200, 150), (10, 150)]
         self.assertEqual(ap1.clip_screen(poly), poly)
 
-    def test_toda_a_cena_fica_visivel_no_plano_geral(self):
+    def test_estacao_inteira_fica_visivel_no_plano_geral(self):
+        """Sol, Terra e cinturão ficam a milhares de unidades: só a estação precisa caber."""
         cena = ap1.Scene()
         cena.camera.snap_to("geral")
-        for m in cena.meshes:
+        estacao = ([cena.station, cena.lab, cena.door_hi, cena.door_lo, cena.cargo]
+                   + [m for r in cena.robots for m in r.meshes])
+        for m in estacao:
             self.assertTrue(m.in_frustum(cena.camera), msg=m.name)
 
 
@@ -961,6 +1053,46 @@ class TestEfeitosVisuais(unittest.TestCase):
         self.assertEqual(glow._bytes, sum(s.get_width() * s.get_height() * 4
                                           for s in glow._cache.values()))
 
+    def test_pulso_de_acoplamento_so_existe_na_janela_da_trava(self):
+        t = ap1.DOCKING_LATCH_TIME
+        self.assertEqual(ap1.docking_pulse(t - 0.01), 0.0)
+        self.assertEqual(ap1.docking_pulse(t + ap1.DOCKING_PULSE), 0.0)
+        self.assertAlmostEqual(ap1.docking_pulse(t), 1.0)
+        self.assertGreater(ap1.docking_pulse(t + 0.1), ap1.docking_pulse(t + 0.5))
+
+    def test_camera_so_treme_durante_o_acoplamento(self):
+        cena = ap1.Scene()
+        cena.goto_phase(3)
+        cena.update(1.0 / 60.0)
+        self.assertEqual(cena.camera.shake, (0.0, 0.0, 0.0))
+        cena.sim_time = ap1.DOCKING_LATCH_TIME + 0.05
+        cena.update(1.0 / 60.0)
+        self.assertGreater(ap1.length(cena.camera.shake), 0.0)
+        cena.sim_time = ap1.DOCKING_LATCH_TIME + ap1.DOCKING_PULSE + 0.1
+        cena.update(1.0 / 60.0)
+        self.assertEqual(cena.camera.shake, (0.0, 0.0, 0.0))
+
+    def test_camera_parada_nao_treme_em_pausa(self):
+        cena = ap1.Scene()
+        cena.goto_phase(4)
+        cena.toggle()                          # pausa exatamente na trava
+        cena.update(1.0 / 60.0)
+        self.assertEqual(cena.camera.shake, (0.0, 0.0, 0.0))
+
+    def test_cruzar_a_trava_solta_faiscas(self):
+        cena = ap1.Scene()
+        cena.goto_phase(3)
+        cena.sim_time = ap1.DOCKING_LATCH_TIME - 0.005
+        cena.particles.clear()
+        cena.update(1.0 / 60.0)                # depois da trava o retrofoguete já desligou
+        self.assertGreater(len(cena.particles.particles), 0)
+
+    def test_clarao_de_acoplamento_desenha_sem_erro(self):
+        cena = ap1.Scene()
+        cena.goto_phase(4)
+        cena.update(1.0 / 60.0)
+        ap1.Renderer().draw(self.surface, cena)
+
     def test_cache_de_estrelas_invalida_ao_mover_a_camera(self):
         cena = ap1.Scene()
         r = ap1.Renderer()
@@ -1101,6 +1233,14 @@ def smoke():
     app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_h))
     app.step(dt)
     marco("painel de dados")
+
+    app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_n))
+    app.step(dt)
+    marco("rótulos (%d na tela)" % app.hud.rotulos_desenhados)
+    app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_t))
+    for _ in range(30):
+        app.step(dt)
+    marco("tour de câmera (%s)" % app.scene.camera.key)
 
     app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_r))
     app.step(dt)

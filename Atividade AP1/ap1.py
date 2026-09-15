@@ -16,8 +16,10 @@ acontece apenas dentro de main().
 """
 
 import math
+import os
 import random
 import sys
+import time
 
 import pygame
 
@@ -278,6 +280,8 @@ DEFAULT_CAMERA = "geral"
 FOLLOW_CAMERA = "foco"
 FOLLOW_NAME = "Foco Animado no Cargueiro [F]"
 FOLLOW_OFFSET = (250.0, 130.0, -430.0)  # deslocamento do olho em relação ao alvo
+# Tour de câmera (tecla T): um enquadramento por fase da sequência
+TOUR_CAMERAS = ("direita", FOLLOW_CAMERA, "geral", "superior")
 
 # Níveis de zoom: cada um escolhe o que fica no centro do quadro e quanto a
 # câmera se afasta. É assim que a mesma cena mostra tanto a comporta de doca
@@ -307,18 +311,36 @@ class Camera:
         self.eye_offset = p["eye"]
         self.target_offset = p["target"]
         self.anchor = list(anchor if anchor is not None else STATION_ORIGIN)
+        self.anchor_source = None
         self.zoom = 1.0
         self.follow_mesh = None
-        self.eye = list(self._goal(self.eye_offset))
-        self.target = list(self._goal(self.target_offset))
-        self.eye_goal = list(self.eye)
-        self.target_goal = list(self.target)
+        # tremor somado por cima da pose (efeito de acoplamento); fica fora da
+        # interpolação, então não acumula deriva
+        self.shake = (0.0, 0.0, 0.0)
+        self._assentar()
         self._rebuild_basis()
 
     def _goal(self, offset):
         return (self.anchor[0] + offset[0] * self.zoom,
                 self.anchor[1] + offset[1] * self.zoom,
                 self.anchor[2] + offset[2] * self.zoom)
+
+    def _fonte(self):
+        """Quem é a âncora agora: muda ao entrar ou sair do foco e ao trocar de zoom."""
+        if self.follow_mesh is not None:
+            return ("malha", id(self.follow_mesh))
+        return ("ancora", self.anchor_source)
+
+    def _assentar(self):
+        """Coloca a câmera exatamente no preset atual, sem transição."""
+        self._eye_rel = [c * self.zoom for c in self.eye_offset]
+        self._target_rel = [c * self.zoom for c in self.target_offset]
+        self._fonte_vista = self._fonte()
+        self._shake_aplicado = (0.0, 0.0, 0.0)
+        self.eye = list(self._goal(self.eye_offset))
+        self.target = list(self._goal(self.target_offset))
+        self.eye_goal = list(self.eye)
+        self.target_goal = list(self.target)
 
     def go_to(self, preset):
         """Agenda a transição suave para um preset."""
@@ -337,30 +359,54 @@ class Camera:
         self.target_offset = (0.0, 0.0, 0.0)
         self.follow_mesh = mesh
 
-    def set_anchor(self, pos, zoom=None):
-        """Ponto que a câmera acompanha, atualizado pela cena a cada quadro."""
+    def set_anchor(self, pos, zoom=None, fonte=None):
+        """
+        Ponto que a câmera acompanha, atualizado pela cena a cada quadro.
+        `fonte` diz quem é a âncora ("station", "earth", "sun"); quando ela
+        troca, `update` recalcula o deslocamento para não saltar.
+        """
         self.anchor = list(pos)
         if zoom is not None:
             self.zoom = zoom
+        if fonte is not None:
+            self.anchor_source = fonte
 
     def snap_to(self, preset):
         """Salta instantaneamente para um preset (usado no reset)."""
         self.go_to(preset)
-        self.eye = list(self._goal(self.eye_offset))
-        self.target = list(self._goal(self.target_offset))
-        self.eye_goal = list(self.eye)
-        self.target_goal = list(self.target)
+        self._assentar()
         self._rebuild_basis()
 
     def update(self, dt):
+        """
+        Interpola o deslocamento em relação à âncora, e não a posição absoluta.
+        A estação orbita a Terra, que orbita o Sol a ~545 unidades/s: com o lerp
+        em coordenadas de mundo a câmera ficava ~115 unidades para trás e o foco
+        animado nunca centralizava o cargueiro.
+        """
         if self.follow_mesh is not None:
             self.anchor = list(self.follow_mesh.pos)
+        ax, ay, az = self.anchor
+        fonte = self._fonte()
+        if fonte != self._fonte_vista:
+            # a âncora trocou de dono: o deslocamento parte da pose atual, então a
+            # troca continua sendo uma transição suave, e não um corte
+            sx, sy, sz = self._shake_aplicado
+            self._eye_rel = [self.eye[0] - sx - ax, self.eye[1] - sy - ay,
+                             self.eye[2] - sz - az]
+            self._target_rel = [self.target[0] - sx - ax, self.target[1] - sy - ay,
+                                self.target[2] - sz - az]
+            self._fonte_vista = fonte
         self.eye_goal = list(self._goal(self.eye_offset))
         self.target_goal = list(self._goal(self.target_offset))
         k = min(1.0, 5.0 * dt)
+        z = self.zoom
         for i in range(3):
-            self.eye[i] = lerp(self.eye[i], self.eye_goal[i], k)
-            self.target[i] = lerp(self.target[i], self.target_goal[i], k)
+            self._eye_rel[i] = lerp(self._eye_rel[i], self.eye_offset[i] * z, k)
+            self._target_rel[i] = lerp(self._target_rel[i], self.target_offset[i] * z, k)
+            self.eye[i] = self.anchor[i] + self._eye_rel[i] + self.shake[i]
+            self.target[i] = self.anchor[i] + self._target_rel[i] + self.shake[i]
+        self._shake_aplicado = tuple(self.shake)
         self._rebuild_basis()
 
     def _rebuild_basis(self):
@@ -1344,6 +1390,21 @@ DOOR_OPEN_END = 6.0
 DOOR_CLOSE_START = 8.5
 DOOR_CLOSE_END = 10.0
 
+# Trava do acoplamento: o cargueiro chega ao fim do trilho no instante em que a
+# comporta termina de fechar. O pulso comanda o tremor da câmera e o clarão.
+DOCKING_LATCH_TIME = DOOR_CLOSE_END
+DOCKING_PULSE = 0.7
+
+
+def docking_pulse(t):
+    """Intensidade do efeito de acoplamento: 1 na trava, caindo a 0 ao fim da janela."""
+    # os limites são comparados em t, e não na fração: (10,7 - 10) / 0,7 dá
+    # 0,999..., e o fim exato da janela deixaria um pulso residual
+    if t < DOCKING_LATCH_TIME or t >= DOCKING_LATCH_TIME + DOCKING_PULSE:
+        return 0.0
+    u = (t - DOCKING_LATCH_TIME) / DOCKING_PULSE
+    return (1.0 - u) * (1.0 - u)
+
 
 class DoorFSM:
     """
@@ -1546,6 +1607,7 @@ class Scene:
         self.beacons = AlertBeacons()
         self.sight = []
         self.loop = False              # repete a sequência sem parar
+        self.tour = False              # câmera troca sozinha a cada fase (tecla T)
         self.extended_orbit = False    # fase de inspeção com três voltas
         self.speed_index = DEFAULT_SPEED_INDEX
         self.cycles = 0
@@ -1596,6 +1658,16 @@ class Scene:
              (86, 226, 198)),
         )
 
+    def label_targets(self):
+        """
+        Rótulos da tecla N: nome e papel de cada objeto no requisito 3 —
+        instâncias de um mesmo tipo, objetos sem partes e objetos compostos.
+        """
+        rotulos = [("%s · instância" % r.name.replace("Robô ", ""), r.pos) for r in self.robots]
+        rotulos += [("%s · composto" % m.name, m.pos) for m in (self.station, self.lab, self.cargo)]
+        rotulos += [("%s · sem partes" % m.name, m.pos) for m in (self.earth, self.moon)]
+        return rotulos
+
     def shadow_factor(self, ponto):
         """Quanto o ponto está eclipsado pela Terra, de 0 (pleno sol) a 1."""
         dentro, intensidade = in_earth_shadow(ponto, self.anim_time)
@@ -1628,7 +1700,8 @@ class Scene:
         self.particles.clear()
         self.station_pos = station_position(0.0)
         nivel = self.zoom_level
-        self.camera.set_anchor(self.anchor_position(nivel["anchor"]), nivel["scale"])
+        self.camera.set_anchor(self.anchor_position(nivel["anchor"]), nivel["scale"],
+                               fonte=nivel["anchor"])
         self.camera.snap_to(DEFAULT_CAMERA)
         self.apply_animation(0.0)
         self.sight = self.line_of_sight()
@@ -1704,6 +1777,11 @@ class Scene:
             self.sim_time = self.total_time
         return self.extended_orbit
 
+    def toggle_tour(self):
+        """Tecla T: a câmera troca sozinha a cada fase, seguindo TOUR_CAMERAS."""
+        self.tour = not self.tour
+        return self.tour
+
     def change_speed(self, passo):
         """Teclas + e -: escolhe entre os fatores de velocidade previstos."""
         self.speed_index = int(clamp(self.speed_index + passo, 0, len(SPEED_STEPS) - 1))
@@ -1711,6 +1789,7 @@ class Scene:
 
     # -- laço de atualização ----------------------------------------------
     def update(self, dt):
+        antes = self.sim_time
         if self.state == STATE_EXECUTANDO:
             passo = dt * self.speed
             self.anim_time += passo
@@ -1728,10 +1807,37 @@ class Scene:
             self.anim_time += dt          # o ambiente respira mesmo em pausa
         self.apply_animation(self.sim_time, emitir=(self.state == STATE_EXECUTANDO))
         self.particles.update(dt)
+        if self.tour:
+            chave = TOUR_CAMERAS[self.phase_index]
+            if self.camera.key != chave:
+                # reaproveita as transições interpoladas das teclas de câmera
+                if chave == FOLLOW_CAMERA:
+                    self.camera.follow(self.cargo)
+                else:
+                    self.camera.go_to(chave)
         nivel = self.zoom_level
-        self.camera.set_anchor(self.anchor_position(nivel["anchor"]), nivel["scale"])
+        self.camera.set_anchor(self.anchor_position(nivel["anchor"]), nivel["scale"],
+                               fonte=nivel["anchor"])
+        if antes < DOCKING_LATCH_TIME <= self.sim_time:
+            self._emit_docking_sparks()
+        pulso = docking_pulse(self.sim_time) if self.state == STATE_EXECUTANDO else 0.0
+        if pulso > 0.0:
+            # tremor curto da trava, somado por cima da pose da câmera
+            a = 7.0 * nivel["scale"] * pulso
+            tau = self.anim_time
+            self.camera.shake = (a * math.sin(tau * 47.0), a * math.sin(tau * 61.0),
+                                 a * math.sin(tau * 53.0))
+        else:
+            self.camera.shake = (0.0, 0.0, 0.0)
         self.camera.update(dt)
         self.sight = self.line_of_sight()
+
+    def _emit_docking_sparks(self):
+        """Faíscas da trava: quatro jatos radiais saindo do anel de doca."""
+        anel = self.to_world((92.0, 0.0, 0.0))
+        for direcao in ((0.0, 1.0, 0.0), (0.0, -1.0, 0.0), (0.0, 0.0, 1.0), (0.0, 0.0, -1.0)):
+            self.particles.emit(anel, rotate_xyz(direcao, (STATION_ATTITUDE, 0.0, 0.0)),
+                                count=6, speed=120.0)
 
     def apply_animation(self, t, emitir=False):
         # o ambiente segue o relógio contínuo; a sequência segue o tempo da fase
@@ -2065,7 +2171,22 @@ class Renderer:
 
         self.faces_desenhadas = sum(1 for it in itens if it[1] == 0)
         self.faces_descartadas = descartadas
+        self._draw_docking_flash(surface, scene, cam)
         self._draw_sight(surface, scene, cam)
+
+    def _draw_docking_flash(self, surface, scene, cam):
+        """Clarão da trava de acoplamento, somado por cima do anel de doca."""
+        pulso = docking_pulse(scene.sim_time)
+        if pulso <= 0.0:
+            return
+        v = cam.to_view(scene.to_world((92.0, 0.0, 0.0)))
+        if v[2] < NEAR:
+            return
+        # a intensidade entra na chave do cache de halos: em 8 degraus, a janela
+        # de 0,7 s reaproveita sprites em vez de criar um por quadro
+        degrau = math.ceil(pulso * 8.0) / 8.0
+        self.glow.blit(surface, project_view(v), int(150.0 * FOV / v[2]), (255, 226, 170),
+                       intensidade=0.9 * degrau, queda=1.8)
 
     def _draw_stars(self, surface, scene, cam):
         """
@@ -2191,9 +2312,9 @@ CONCEPTS = (
     "Câmera look-at com base ortonormal e transição interpolada",
     "Projeção em perspectiva com distância focal e recorte no plano próximo",
     "Back-face culling vetorial e algoritmo do pintor por profundidade de câmera",
-    "Iluminação Lambertiana plana com termo ambiente e luz direcional",
+    "Sombreamento plano: Lambert com a luz do Sol, preenchimento e realce Blinn-Phong",
     "Transformação hierárquica: comportas e robôs ancorados no núcleo",
-    "Instanciação parametrizada: três robôs e três detritos de uma mesma família",
+    "Instanciação parametrizada: quatro robôs MR-1 a MR-4 e nove detritos",
     "Traçado de raio: interseção raio-esfera para teste de linha de visão",
     "Máquinas de estado aninhadas: sequência geral e comporta de doca",
 )
@@ -2213,6 +2334,10 @@ class Hud:
         self.font_title = pygame.font.SysFont("Consolas", 19, bold=True)
         self.show_credits = False
         self.show_debug = False
+        self.show_labels = False
+        self.rotulos_desenhados = 0
+        self._aviso = ""
+        self._aviso_restante = 0          # quadros que o aviso ainda fica na tela
         self._texto_cache = {}
         self._camadas = {}
         self._fase_vista = None
@@ -2253,13 +2378,55 @@ class Hud:
         surface.blit(self._camada(rect[2], rect[3], HUD_BG, alpha), (rect[0], rect[1]))
         pygame.draw.rect(surface, (46, 58, 76), rect, 1, border_radius=4)
 
-    def draw(self, surface, scene, renderer):
+    def draw(self, surface, scene, renderer, desempenho=None):
+        """`desempenho` é (FPS medido, ms de CPU por quadro), publicado pela App."""
         if self.show_credits:
             self._draw_credits(surface)
+        else:
+            if self.show_labels:
+                self._draw_labels(surface, scene)
+            self._draw_main(surface, scene)
+            if self.show_debug:
+                self._draw_debug(surface, scene, renderer, desempenho)
+        self._draw_notice(surface)
+
+    AVISO_QUADROS = 120                  # cerca de 2 s a 60 FPS
+
+    def notify(self, texto):
+        """Aviso curto acima do rodapé; some sozinho, contado por quadro como o clarão."""
+        self._aviso = texto
+        self._aviso_restante = self.AVISO_QUADROS
+
+    def _draw_notice(self, surface):
+        if self._aviso_restante <= 0:
             return
-        self._draw_main(surface, scene)
-        if self.show_debug:
-            self._draw_debug(surface, scene, renderer)
+        self._aviso_restante -= 1
+        rotulo = self.txt(self.font_bold, self._aviso, True, HUD_ACCENT)
+        x = (WIDTH - rotulo.get_width()) // 2
+        y = HEIGHT - 120
+        self._panel(surface, (x - 12, y - 6, rotulo.get_width() + 24, rotulo.get_height() + 12))
+        surface.blit(rotulo, (x, y))
+
+    def _draw_labels(self, surface, scene):
+        """
+        Tecla N: nome e papel de cada objeto, presos à projeção da sua posição.
+        Vêm antes dos painéis, para a interface continuar legível por cima.
+        """
+        cam = scene.camera
+        desenhados = 0
+        for texto, pos in scene.label_targets():
+            p = project_point(pos, cam)
+            if p is None or not (0 <= p[0] < WIDTH and 0 <= p[1] < HEIGHT):
+                continue
+            rotulo = self.txt(self.font, texto, True, HUD_TXT)
+            x, y = p[0] + 16, p[1] - 28
+            pygame.draw.line(surface, HUD_DIM, p, (x - 4, y + rotulo.get_height() // 2), 1)
+            pygame.draw.circle(surface, HUD_ACCENT, p, 3)
+            surface.blit(self._camada(rotulo.get_width() + 8, rotulo.get_height() + 2,
+                                      HUD_BG, 170), (x - 4, y - 1))
+            surface.blit(rotulo, (x, y))
+            desenhados += 1
+        self.rotulos_desenhados = desenhados
 
     FLASH_DECAIMENTO = 1.0 / 30.0        # cerca de meio segundo a 60 FPS
 
@@ -2310,6 +2477,8 @@ class Hud:
             partes.append("Repetição: desligada")
         if scene.extended_orbit:
             partes.append("Órbita estendida: ~%g voltas" % ORBIT_TURNS)
+        if scene.tour:
+            partes.append("Tour: LIGADO")
         return "   ".join(partes)
 
     @staticmethod
@@ -2327,16 +2496,21 @@ class Hud:
 
     def _draw_footer(self, surface, scene):
         """Rodapé: comandos e indicador de progresso com as marcas das fases."""
-        alt = 50
+        alt = 68
         topo = HEIGHT - alt - 14
         self._panel(surface, (18, topo, WIDTH - 36, alt))
         surface.blit(self.txt(self.font, 
             "[ESPAÇO] iniciar/pausar  [R] reiniciar  [1-4] fases  [C W S A D] câmeras  "
-            "[F] foco  [Z/X] zoom  [B] órbitas  [L] repetir  [O] inspeção  "
-            "[+/-] velocidade  [H] dados  [TAB] créditos  [ESC] sair",
+            "[F] foco  [T] tour  [Z/X] zoom  [+/-] velocidade",
             True, HUD_DIM), (32, topo + 8))
+        # em uma linha só os comandos passavam da largura do painel e [TAB] e
+        # [ESC] ficavam cortados
+        surface.blit(self.txt(self.font,
+            "[B] órbitas  [L] repetir  [O] inspeção  [N] rótulos  [H] dados  "
+            "[F12] captura  [TAB] créditos  [ESC] sair",
+            True, HUD_DIM), (32, topo + 26))
 
-        x, y, larg, esp = 32, topo + 30, WIDTH - 276, 11
+        x, y, larg, esp = 32, topo + 48, WIDTH - 276, 11
         pygame.draw.rect(surface, (26, 34, 46), (x, y, larg, esp), border_radius=3)
         pygame.draw.rect(surface, HUD_ACCENT,
                          (x, y, int(larg * scene.progress), esp), border_radius=3)
@@ -2365,10 +2539,18 @@ class Hud:
         linhas.append("tempo simulado ..... %.0fs" % t)
         return linhas
 
-    def _draw_debug(self, surface, scene, renderer):
+    def _draw_debug(self, surface, scene, renderer, desempenho=None):
         cam = scene.camera
+        if desempenho is None:
+            fps_txt = cpu_txt = "medindo..."
+        else:
+            fps, cpu_ms = desempenho
+            fps_txt = "%.0f" % fps if fps > 0.0 else "-- (sem janela)"
+            cpu_txt = "%.1f ms / %.1f" % (cpu_ms, 1000.0 / FPS)
         linhas = [
             "PIPELINE",
+            "FPS medido ........ " + fps_txt,
+            "quadro (CPU) ...... " + cpu_txt,
             "faces desenhadas .. %d" % renderer.faces_desenhadas,
             "faces descartadas . %d" % renderer.faces_descartadas,
             "malhas na cena .... %d" % len(scene.meshes),
@@ -2381,7 +2563,7 @@ class Hud:
         alt = 18 + len(linhas) * 17
         self._panel(surface, (WIDTH - 306, 16, 288, alt))
         for i, txt in enumerate(linhas):
-            cor = HUD_ACCENT if txt and not txt.startswith((" ", "f", "m", "p", "o", "a", "F", "n", "t")) else HUD_DIM
+            cor = HUD_ACCENT if txt and not txt.startswith((" ", "f", "m", "p", "o", "a", "F", "n", "t", "q")) else HUD_DIM
             surface.blit(self.txt(self.font, txt, True, cor), (WIDTH - 292, 26 + i * 17))
 
     def _draw_credits(self, surface):
@@ -2456,6 +2638,11 @@ class App:
         self.renderer = Renderer()
         self.hud = Hud()
         self.running = True
+        # medição publicada no painel [H]: (FPS do relógio, ms de CPU por quadro)
+        self.desempenho = None
+        self._janela_s = 0.0
+        self._soma_ms = 0.0
+        self._quadros = 0
 
     def handle_event(self, event):
         """Comandos discretos de teclado; nenhuma navegação contínua."""
@@ -2464,8 +2651,12 @@ class App:
             return
         if event.type != pygame.KEYDOWN:
             return
+        if event.key in CAMERA_KEYS or event.key == pygame.K_f:
+            self.scene.tour = False            # o comando manual de câmera vence o tour
         if event.key == pygame.K_ESCAPE:
             self.running = False
+        elif event.key == pygame.K_t:
+            self.scene.toggle_tour()
         elif event.key == pygame.K_SPACE:
             self.scene.toggle()
         elif event.key == pygame.K_r:
@@ -2474,6 +2665,10 @@ class App:
             self.scene.camera.follow(self.scene.cargo)
         elif event.key == pygame.K_h:
             self.hud.show_debug = not self.hud.show_debug
+        elif event.key == pygame.K_n:
+            self.hud.show_labels = not self.hud.show_labels
+        elif event.key == pygame.K_F12:
+            self.save_screenshot()
         elif event.key == pygame.K_l:
             self.scene.toggle_loop()
         elif event.key == pygame.K_z:
@@ -2496,9 +2691,45 @@ class App:
             self.scene.goto_phase(PHASE_KEYS[event.key])
 
     def step(self, dt):
+        t0 = time.perf_counter()
         self.scene.update(dt)
         self.renderer.draw(self.screen, self.scene)
-        self.hud.draw(self.screen, self.scene, self.renderer)
+        self.hud.draw(self.screen, self.scene, self.renderer, self.desempenho)
+        self._medir((time.perf_counter() - t0) * 1000.0, dt)
+
+    def _medir(self, trabalho_ms, dt):
+        """
+        Média do custo de CPU por quadro, publicada a cada meio segundo: um
+        número novo por quadro criaria uma superfície de texto nova por quadro
+        no cache do HUD, e ainda ficaria ilegível de tanto piscar.
+        """
+        self._soma_ms += trabalho_ms
+        self._quadros += 1
+        self._janela_s += dt
+        if self._janela_s >= 0.5:
+            self.desempenho = (self.clock.get_fps(), self._soma_ms / self._quadros)
+            self._janela_s = self._soma_ms = 0.0
+            self._quadros = 0
+
+    def save_screenshot(self, pasta=None):
+        """
+        Tecla F12: grava a tela atual, com o HUD, em docs/img. Duas capturas no
+        mesmo segundo ganham sufixo em vez de se sobrescreverem. Devolve o caminho.
+        """
+        if pasta is None:
+            pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 os.pardir, "docs", "img")
+        pasta = os.path.normpath(pasta)
+        os.makedirs(pasta, exist_ok=True)
+        base = time.strftime("captura-%Y%m%d-%H%M%S")
+        caminho = os.path.join(pasta, base + ".png")
+        n = 2
+        while os.path.exists(caminho):
+            caminho = os.path.join(pasta, "%s-%d.png" % (base, n))
+            n += 1
+        pygame.image.save(self.screen, caminho)
+        self.hud.notify("Captura salva: %s" % os.path.basename(caminho))
+        return caminho
 
     def run(self):
         while self.running:

@@ -74,6 +74,9 @@ estão em `python "Atividade AP1/test_ap1.py" --bench`. As decisões que mais re
 | Cache das superfícies de texto do HUD | a interface caiu de 2,37 ms para cerca de 0,25 ms |
 | Halos como sprites pré-renderizados, com a cor pré-multiplicada | a soma aditiva do Pygame ignora o alpha; sem pré-multiplicar, o halo vira um disco chapado |
 | `DETAIL`, multiplicador global de resolução | calibra a cena inteira sem reescrever construtores |
+| Halos com teto de memória: sprite de no máximo 512 px, ampliado só no trecho visível, cache de 32 MB | com o Sol ou a Terra perto da câmera o processo chegava a 8 GB; hoje fica em torno de 50 MB |
+| Rejeição e recorte 2D das faces (`frustum_test` + `clip_screen`), só nas malhas que cruzam a borda | na câmera inferior a Terra, inteira fora da tela, custava ~8 ms por quadro em polígonos de 31 mil pixels |
+| Anéis de órbita calculados uma vez e apenas transladados até a Terra | tira ~300 chamadas de função por quadro do traçado das órbitas |
 
 Resultado: o quadro saiu de **10,25 ms** (cena antiga, 823 faces) para cerca de
 **11,5 ms** com a cena atual, que tem aproximadamente o dobro de faces, 28 malhas e
@@ -100,7 +103,15 @@ efeitos adicionais. O orçamento de 60 FPS é 16,7 ms.
    continuar aumentando a cena.
 6. **Halos chapados.** A soma aditiva do Pygame ignora o canal alpha, e o brilho do
    planeta virava um anel sólido até a cor ser pré-multiplicada.
-7. **[CONFIRMAR]** Dificuldades de organização da equipe, prazos ou ferramentas que
+7. **8 GB de memória.** Os halos eram guardados em sprites do tamanho do próprio
+   brilho. Com o Sol ou a Terra a poucas unidades da câmera, um único sprite pedia
+   dezenas de GB, e o cache guardava até 120 deles. Hoje o sprite tem teto de 512 px
+   e o brilho grande é ampliado só no trecho que aparece na janela.
+8. **Câmera atrasada.** A estação orbita a Terra, que orbita o Sol a ~545 unidades/s,
+   e a interpolação em coordenadas de mundo deixava a câmera ~115 unidades para trás:
+   o foco animado nunca centralizava o cargueiro. A câmera passou a interpolar o
+   deslocamento em relação à âncora.
+9. **[CONFIRMAR]** Dificuldades de organização da equipe, prazos ou ferramentas que
    valham registro.
 
 ## 3. Divisão de tarefas
