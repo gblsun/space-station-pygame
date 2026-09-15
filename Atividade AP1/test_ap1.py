@@ -705,6 +705,46 @@ class TestFrustumCulling(unittest.TestCase):
                             ap1.vec_scale(cam.right, 360.0))
         self.assertTrue(self.malha_em(borda, raio=300.0).in_frustum(cam))
 
+    def test_frustum_distingue_malha_inteira_dentro_de_malha_na_borda(self):
+        cam = ap1.Camera("geral")
+        frente = ap1.vec_add(cam.eye, ap1.vec_scale(cam.forward, 400.0))
+        self.assertEqual(self.malha_em(frente, raio=20.0).frustum_test(cam), 2)
+        borda = ap1.vec_add(frente, ap1.vec_scale(cam.right, 360.0))
+        self.assertEqual(self.malha_em(borda, raio=300.0).frustum_test(cam), 1)
+
+    def test_faces_projetadas_fora_da_janela_sao_descartadas(self):
+        """Regressão: a esfera cruzava a borda e faces sem nenhum pixel na tela eram desenhadas."""
+        cam = ap1.Camera("geral")
+        pos = ap1.vec_add(ap1.vec_add(cam.eye, ap1.vec_scale(cam.forward, 400.0)),
+                          ap1.vec_scale(cam.right, 560.0))
+        m = self.malha_em(pos, raio=100.0)
+        self.assertEqual(m.frustum_test(cam), 1)
+        self.assertEqual(m.collect(cam), ([], len(m.faces)))
+
+    def test_faces_gigantes_sao_recortadas_na_margem_da_janela(self):
+        """Regressão: faces junto ao plano próximo projetavam para dezenas de milhares de pixels."""
+        cam = ap1.Camera("geral")
+        borda = ap1.vec_add(ap1.vec_add(cam.eye, ap1.vec_scale(cam.forward, 400.0)),
+                            ap1.vec_scale(cam.right, 360.0))
+        visiveis, _ = self.malha_em(borda, raio=300.0).collect(cam)
+        self.assertTrue(visiveis)
+        g = ap1.SCREEN_GUARD
+        for _, pontos, _ in visiveis:
+            for x, y in pontos:
+                self.assertTrue(-g <= x <= ap1.WIDTH + g and -g <= y <= ap1.HEIGHT + g, (x, y))
+
+    def test_recorte_de_tela_limita_poligono_gigante(self):
+        g = ap1.SCREEN_GUARD
+        recortado = ap1.clip_screen([(-30000, -20000), (30000, -20000),
+                                     (30000, 20000), (-30000, 20000)])
+        self.assertEqual(sorted(recortado), sorted([(-g, -g), (ap1.WIDTH + g, -g),
+                                                    (ap1.WIDTH + g, ap1.HEIGHT + g),
+                                                    (-g, ap1.HEIGHT + g)]))
+
+    def test_recorte_de_tela_preserva_poligono_dentro_da_janela(self):
+        poly = [(10, 10), (200, 10), (200, 150), (10, 150)]
+        self.assertEqual(ap1.clip_screen(poly), poly)
+
     def test_toda_a_cena_fica_visivel_no_plano_geral(self):
         cena = ap1.Scene()
         cena.camera.snap_to("geral")
@@ -895,6 +935,31 @@ class TestEfeitosVisuais(unittest.TestCase):
         borda = fundo.get_at((40, 6))
         self.assertGreater(sum(centro[:3]), sum(meio[:3]))
         self.assertGreater(sum(meio[:3]), sum(borda[:3]))
+
+    def test_halo_gigante_tem_memoria_limitada(self):
+        """Regressão: um astro colado ao plano próximo pedia um sprite de dezenas de GB."""
+        glow = ap1.GlowSprites()
+        fundo = pygame.Surface((ap1.WIDTH, ap1.HEIGHT))
+        fundo.fill((0, 0, 0))
+        centro = (ap1.WIDTH // 2, ap1.HEIGHT // 2)
+        glow.blit(fundo, centro, 200000, (255, 214, 128))
+        self.assertGreater(sum(fundo.get_at(centro)[:3]), 0)
+        for sprite in glow._cache.values():
+            self.assertLessEqual(sprite.get_width(), 2 * ap1.GlowSprites.RAIO_BASE)
+
+    def test_halo_fora_da_tela_nao_cria_sprite(self):
+        glow = ap1.GlowSprites()
+        glow.blit(self.surface, (-5000, -5000), 300, (255, 180, 40))
+        self.assertEqual(glow._cache, {})
+
+    def test_cache_de_halos_respeita_orcamento(self):
+        glow = ap1.GlowSprites()
+        for i in range(40):                   # 40 sprites de ~1 MB contra teto de 32 MB
+            glow.sprite(ap1.GlowSprites.RAIO_BASE, (255, 180, 40), 0.3 + i * 0.01, 2.0)
+        self.assertLessEqual(glow._bytes, ap1.GlowSprites.ORCAMENTO)
+        self.assertLess(len(glow._cache), 40)
+        self.assertEqual(glow._bytes, sum(s.get_width() * s.get_height() * 4
+                                          for s in glow._cache.values()))
 
     def test_cache_de_estrelas_invalida_ao_mover_a_camera(self):
         cena = ap1.Scene()

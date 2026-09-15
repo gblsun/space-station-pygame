@@ -450,6 +450,38 @@ def clip_near(poly):
     return out
 
 
+# Margem além da borda da janela para o recorte 2D. Uma face cortada no plano
+# próximo projeta para dezenas de milhares de pixels, e o Pygame percorre cada
+# linha do polígono mesmo quando nada dele cai na tela.
+SCREEN_GUARD = 64
+
+
+def clip_screen(pontos):
+    """
+    Recorta um polígono já projetado contra a janela ampliada pela margem de
+    guarda (Sutherland-Hodgman com os quatro lados do retângulo). O que sai fica
+    fora da tela: a imagem não muda, só o custo de rasterização.
+    """
+    for eixo, limite, sentido in ((0, -SCREEN_GUARD, 1.0), (0, WIDTH + SCREEN_GUARD, -1.0),
+                                  (1, -SCREEN_GUARD, 1.0), (1, HEIGHT + SCREEN_GUARD, -1.0)):
+        n = len(pontos)
+        if n < 3:
+            return []
+        out = []
+        for i in range(n):
+            cur = pontos[i]
+            nxt = pontos[(i + 1) % n]
+            cur_in = (cur[eixo] - limite) * sentido >= 0.0
+            nxt_in = (nxt[eixo] - limite) * sentido >= 0.0
+            if cur_in:
+                out.append(cur)
+            if cur_in != nxt_in:
+                t = (limite - cur[eixo]) / (nxt[eixo] - cur[eixo])
+                out.append((lerp(cur[0], nxt[0], t), lerp(cur[1], nxt[1], t)))
+        pontos = out
+    return [(int(x), int(y)) for x, y in pontos]
+
+
 def project_point(p, camera):
     """Projeta um ponto isolado; None se estiver atrás do plano próximo."""
     v = camera.to_view(p)
@@ -535,20 +567,29 @@ class PolyMesh:
         self._world_cache = saida
         return saida
 
-    def in_frustum(self, camera):
+    def frustum_test(self, camera):
         """
-        Esfera envolvente contra o tronco de visão. Descarta a malha inteira
-        antes de transformar qualquer vértice — é o que sustenta uma cena com
-        muitos objetos sem estourar o orçamento por quadro.
+        Esfera envolvente contra o tronco de visão: 0 fora, 1 cruzando alguma
+        borda, 2 inteira dentro. Descarta a malha inteira antes de transformar
+        qualquer vértice — é o que sustenta uma cena com muitos objetos sem
+        estourar o orçamento por quadro. Só uma malha que cruza a borda pode ter
+        faces projetadas fora da janela, então só ela paga o teste por face.
         """
         cx, cy, cz = camera.to_view(self.pos)
         r = self.bounding_radius
         if cz + r < NEAR:
-            return False
+            return 0
+        resultado = 2 if cz - r >= NEAR else 1
         for nx, ny, nz in FRUSTUM_PLANES:
-            if nx * cx + ny * cy + nz * cz < -r:
-                return False
-        return True
+            d = nx * cx + ny * cy + nz * cz
+            if d < -r:
+                return 0
+            if d < r:
+                resultado = 1
+        return resultado
+
+    def in_frustum(self, camera):
+        return self.frustum_test(camera) > 0
 
     def collect(self, camera, emissivo=False):
         """
@@ -559,8 +600,10 @@ class PolyMesh:
         """
         if not self.visible:
             return [], 0
-        if not self.in_frustum(camera):
+        enquadramento = self.frustum_test(camera)
+        if not enquadramento:
             return [], len(self.faces)
+        testar_tela = enquadramento == 1
 
         mundo = self.world_vertices()
         ex, ey, ez = camera.eye
@@ -650,6 +693,19 @@ class PolyMesh:
                 k = FOV / (vz if vz > NEAR else NEAR)
                 pontos.append((int(vx * k + VIEW_CENTER_X),
                                int(-vy * k + VIEW_CENTER_Y)))
+            if testar_tela:
+                xs = [p[0] for p in pontos]
+                ys = [p[1] for p in pontos]
+                x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+                if x1 < 0 or y1 < 0 or x0 >= WIDTH or y0 >= HEIGHT:
+                    descartadas += 1          # nenhum pixel da face cai na janela
+                    continue
+                if (x0 < -SCREEN_GUARD or y0 < -SCREEN_GUARD
+                        or x1 > WIDTH + SCREEN_GUARD or y1 > HEIGHT + SCREEN_GUARD):
+                    pontos = clip_screen(pontos)
+                    if len(pontos) < 3:
+                        descartadas += 1
+                        continue
             if emissivo:                      # o Sol emite: não recebe sombreamento
                 prontas.append((soma / len(poly), pontos, cores[idx]))
                 continue
@@ -1516,13 +1572,27 @@ class Scene:
         self.zoom_index = int(clamp(self.zoom_index + passo, 0, len(ZOOM_LEVELS) - 1))
         return self.zoom_level
 
+    _aneis_locais = None
+
     def orbit_rings(self):
-        """Traçados das órbitas, para o renderizador desenhar."""
-        terra = earth_position(self.anim_time)
+        """
+        Traçados das órbitas, para o renderizador desenhar. A forma de cada anel
+        não muda: ela é calculada uma única vez em torno da origem e, a cada
+        quadro, apenas transladada até a Terra.
+        """
+        aneis = Scene._aneis_locais
+        if aneis is None:
+            origem = (0.0, 0.0, 0.0)
+            aneis = Scene._aneis_locais = (
+                orbit_ring(SUN_POS, EARTH_ORBIT, 0.0, 128),
+                orbit_ring(origem, MOON_ORBIT, MOON_INCLINATION, 96),
+                orbit_ring(origem, STATION_ORBIT, STATION_INCLINATION, 80),
+            )
+        tx, ty, tz = earth_position(self.anim_time)
         return (
-            ("Terra", orbit_ring(SUN_POS, EARTH_ORBIT, 0.0, 128), (120, 150, 210)),
-            ("Lua", orbit_ring(terra, MOON_ORBIT, MOON_INCLINATION, 96), (168, 172, 186)),
-            ("Órbita-2", orbit_ring(terra, STATION_ORBIT, STATION_INCLINATION, 80),
+            ("Terra", aneis[0], (120, 150, 210)),
+            ("Lua", [(tx + x, ty + y, tz + z) for x, y, z in aneis[1]], (168, 172, 186)),
+            ("Órbita-2", [(tx + x, ty + y, tz + z) for x, y, z in aneis[2]],
              (86, 226, 198)),
         )
 
@@ -1837,20 +1907,30 @@ class GlowSprites:
     A soma aditiva do Pygame ignora o canal alpha como atenuação, então a cor de
     cada anel já é gravada multiplicada pela intensidade desejada. Sem isso o
     halo vira um disco chapado em vez de um brilho.
+
+    Memória: nenhum sprite passa de RAIO_BASE. Um halo maior (o Sol ou a Terra
+    com a câmera próxima) é ampliado a partir do sprite base, e só no trecho
+    que cai dentro da tela. Sem esse teto, um astro a poucas unidades do plano
+    próximo pedia um sprite de (2·raio)² pixels, dezenas de GB, e o cache
+    chegava a guardar 120 deles.
     """
 
     PASSO = 4            # raios são quantizados, senão o cache cresce demais
+    RAIO_BASE = 256      # maior sprite guardado: 512 x 512 pixels, cerca de 1 MB
+    ORCAMENTO = 32 * 1024 * 1024     # teto de memória do cache, em bytes
 
     def __init__(self):
-        self._cache = {}
+        self._cache = {}     # o dict preserva a ordem de inserção: vira um LRU
+        self._bytes = 0
 
     def sprite(self, raio, cor, intensidade, queda):
-        raio = max(self.PASSO, int(raio / self.PASSO) * self.PASSO)
+        raio = max(self.PASSO, min(self.RAIO_BASE, int(raio / self.PASSO) * self.PASSO))
+        # a cor das partículas varia continuamente; arredondar para múltiplos de
+        # 8 é imperceptível no brilho e evita um sprite novo a cada tonalidade
+        cor = tuple(min(255, (c + 4) & ~7) for c in cor)
         chave = (raio, cor, intensidade, queda)
-        pronto = self._cache.get(chave)
+        pronto = self._cache.pop(chave, None)
         if pronto is None:
-            if len(self._cache) > 120:
-                self._cache.clear()
             lado = raio * 2
             pronto = pygame.Surface((lado, lado), pygame.SRCALPHA)
             passos = max(4, min(48, raio // 3))
@@ -1862,15 +1942,43 @@ class GlowSprites:
                 pygame.draw.circle(pronto, (int(cor[0] * f), int(cor[1] * f),
                                             int(cor[2] * f), 255),
                                    (raio, raio), max(1, int(raio * t)))
-            self._cache[chave] = pronto
+            self._bytes += lado * lado * 4
+            while self._bytes > self.ORCAMENTO and self._cache:
+                velho = self._cache.pop(next(iter(self._cache)))
+                self._bytes -= velho.get_width() * velho.get_height() * 4
+        self._cache[chave] = pronto          # reinserido no fim: usado há pouco
         return pronto, raio
 
     def blit(self, surface, centro, raio, cor, intensidade=0.55, queda=2.2):
         if raio < 2:
             return
-        sprite, raio = self.sprite(raio, cor, intensidade, queda)
-        surface.blit(sprite, (centro[0] - raio, centro[1] - raio),
-                     special_flags=pygame.BLEND_RGB_ADD)
+        cx, cy = centro
+        clip = surface.get_clip()
+        if (cx + raio <= clip.left or cx - raio >= clip.right
+                or cy + raio <= clip.top or cy - raio >= clip.bottom):
+            return                           # fora da tela: nada a alocar
+        if raio <= self.RAIO_BASE:
+            sprite, raio = self.sprite(raio, cor, intensidade, queda)
+            surface.blit(sprite, (cx - raio, cy - raio),
+                         special_flags=pygame.BLEND_RGB_ADD)
+            return
+
+        # Halo maior que o sprite base: amplia apenas o recorte visível, de modo
+        # que a superfície temporária nunca passa do tamanho da janela.
+        base, rb = self.sprite(self.RAIO_BASE, cor, intensidade, queda)
+        caixa = pygame.Rect(cx - raio, cy - raio, 2 * raio, 2 * raio)
+        visivel = caixa.clip(clip)
+        if not visivel:
+            return
+        k = rb / raio                        # pixels do sprite base por pixel de tela
+        fonte = pygame.Rect(round((visivel.x - caixa.x) * k),
+                            round((visivel.y - caixa.y) * k),
+                            max(1, math.ceil(visivel.w * k)),
+                            max(1, math.ceil(visivel.h * k))).clip(base.get_rect())
+        if not fonte:
+            return
+        trecho = pygame.transform.scale(base.subsurface(fonte), visivel.size)
+        surface.blit(trecho, visivel.topleft, special_flags=pygame.BLEND_RGB_ADD)
 
 
 class Renderer:
@@ -2023,16 +2131,25 @@ class Renderer:
         trechos que passam atrás do plano próximo são simplesmente interrompidos,
         o que já basta para uma linha.
         """
+        ex, ey, ez = cam.eye
+        rx, ry, rz = cam.right
+        ux, uy, uz = cam.up
+        fx, fy, fz = cam.forward
         for _nome, pontos, cor in scene.orbit_rings():
             trecho = []
-            for p in pontos + pontos[:1]:
-                tela = project_point(p, cam)
-                if tela is None:
+            # a mesma conta de project_point, desenrolada: são ~300 pontos por
+            # quadro, e as duas chamadas de função por ponto pesavam mais que a
+            # própria projeção
+            for px, py, pz in pontos + pontos[:1]:
+                dx, dy, dz = px - ex, py - ey, pz - ez
+                vz = dx * fx + dy * fy + dz * fz
+                if vz < NEAR:
                     if len(trecho) > 1:
                         pygame.draw.lines(surface, cor, False, trecho)
                     trecho = []
                     continue
-                trecho.append(tela)
+                trecho.append((int((dx * rx + dy * ry + dz * rz) * FOV / vz + VIEW_CENTER_X),
+                               int(-(dx * ux + dy * uy + dz * uz) * FOV / vz + VIEW_CENTER_Y)))
             if len(trecho) > 1:
                 pygame.draw.lines(surface, cor, False, trecho)
 
@@ -2097,6 +2214,7 @@ class Hud:
         self.show_credits = False
         self.show_debug = False
         self._texto_cache = {}
+        self._camadas = {}
         self._fase_vista = None
         self._flash = 0.0
 
@@ -2116,11 +2234,23 @@ class Hud:
             self._texto_cache[chave] = pronto
         return pronto
 
-    @staticmethod
-    def _panel(surface, rect, alpha=205):
-        caixa = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
-        caixa.fill((HUD_BG[0], HUD_BG[1], HUD_BG[2], alpha))
-        surface.blit(caixa, (rect[0], rect[1]))
+    def _camada(self, largura, altura, cor, alpha):
+        """
+        Retângulo translúcido reaproveitado. Criar uma Surface do tamanho da
+        janela a cada quadro só para escurecê-la gerava megabytes de lixo por
+        segundo; cada tamanho é alocado uma vez e a opacidade vira `set_alpha`.
+        """
+        chave = (largura, altura, cor)
+        camada = self._camadas.get(chave)
+        if camada is None:
+            camada = pygame.Surface((largura, altura))
+            camada.fill(cor)
+            self._camadas[chave] = camada
+        camada.set_alpha(alpha)
+        return camada
+
+    def _panel(self, surface, rect, alpha=205):
+        surface.blit(self._camada(rect[2], rect[3], HUD_BG, alpha), (rect[0], rect[1]))
         pygame.draw.rect(surface, (46, 58, 76), rect, 1, border_radius=4)
 
     def draw(self, surface, scene, renderer):
@@ -2147,9 +2277,8 @@ class Hud:
             self._flash = 1.0
         if self._flash <= 0.02:
             return
-        camada = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        camada.fill((96, 200, 214, int(26 * self._flash * self._flash)))
-        surface.blit(camada, (0, 0))
+        surface.blit(self._camada(WIDTH, HEIGHT, (96, 200, 214),
+                                  int(26 * self._flash * self._flash)), (0, 0))
         self._flash -= self.FLASH_DECAIMENTO
 
     def _draw_main(self, surface, scene):
@@ -2256,9 +2385,7 @@ class Hud:
             surface.blit(self.txt(self.font, txt, True, cor), (WIDTH - 292, 26 + i * 17))
 
     def _draw_credits(self, surface):
-        cortina = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
-        cortina.fill((5, 7, 12, 242))
-        surface.blit(cortina, (0, 0))
+        surface.blit(self._camada(WIDTH, HEIGHT, (5, 7, 12), 242), (0, 0))
         x, y = 74, 56
         surface.blit(self.txt(self.font_title, 
             "CRÉDITOS - AP1 Computação Gráfica e RA/RV", True, HUD_ACCENT), (x, y))
