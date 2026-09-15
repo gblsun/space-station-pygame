@@ -245,7 +245,19 @@ class TestGeometria(unittest.TestCase):
             "porta_sup": ap1.build_door_leaf(False),
             "cargueiro": ap1.build_cargo_ship(),
             "laboratorio": ap1.build_lab_module(),
-            "satelite": ap1.build_satellite(),
+            "painel_estacao": ap1.build_station_array(1.0),
+            "iss": ap1.build_iss_core(),
+            "iss_asa": ap1.build_iss_wing(-1.0),
+            "tiangong": ap1.build_tiangong_core(),
+            "tiangong_asa": ap1.build_tiangong_wing(1.0, grande=False),
+            "hubble": ap1.build_hubble_body(),
+            "hubble_asa": ap1.build_hubble_wing(1.0),
+            "jwst": ap1.build_jwst(),
+            "gps": ap1.build_gps_body(),
+            "gps_asa": ap1.build_gps_wing(-1.0),
+            "goes": ap1.build_goes_body(),
+            "goes_painel": ap1.build_goes_array(),
+            "anel": ap1.build_ring(100.0, 200.0, 12, 3, (200, 200, 200)),
             "robo_corpo": ap1.build_robot_body((200, 120, 40)),
             "robo_braco": ap1.build_robot_arm((200, 120, 40), 34.0),
             "robo_garra": ap1.build_robot_arm((200, 120, 40), 26.0, garra=True),
@@ -266,7 +278,14 @@ class TestGeometria(unittest.TestCase):
             ("estação", ap1.build_station_core()),
             ("cargueiro", ap1.build_cargo_ship()),
             ("laboratorio", ap1.build_lab_module()),
-            ("satelite", ap1.build_satellite()),
+            ("painel_estacao", ap1.build_station_array(-1.0)),
+            ("iss", ap1.build_iss_core()),
+            ("iss_asa", ap1.build_iss_wing(1.0)),
+            ("tiangong", ap1.build_tiangong_core()),
+            ("hubble", ap1.build_hubble_body()),
+            ("jwst", ap1.build_jwst()),
+            ("gps_asa", ap1.build_gps_wing(1.0)),
+            ("goes", ap1.build_goes_body()),
             ("robo_corpo", ap1.build_robot_body((200, 120, 40))),
             ("robo_braco", ap1.build_robot_arm((200, 120, 40), 30.0, garra=True)),
         ):
@@ -431,10 +450,11 @@ class TestComportaEBalizas(unittest.TestCase):
         self.assertAlmostEqual(anterior, 1.0, places=3)
 
     def test_folhas_se_afastam_ao_abrir(self):
+        """Distância entre as folhas, e não o Y do mundo: a estação voa em LVLH, inclinada."""
         self.cena.apply_animation(1.0)
-        fechada = abs(self.cena.door_hi.pos[1] - self.cena.door_lo.pos[1])
+        fechada = ap1.length(ap1.vec_sub(self.cena.door_hi.pos, self.cena.door_lo.pos))
         self.cena.apply_animation(7.0)
-        aberta = abs(self.cena.door_hi.pos[1] - self.cena.door_lo.pos[1])
+        aberta = ap1.length(ap1.vec_sub(self.cena.door_hi.pos, self.cena.door_lo.pos))
         self.assertGreater(aberta, fechada + 40.0)
 
     def test_alerta_percorre_todas_as_balizas(self):
@@ -1126,6 +1146,330 @@ class TestEfeitosVisuais(unittest.TestCase):
         for _ in range(120):
             hud.draw(self.surface, cena, r)
         self.assertLessEqual(hud._flash, 0.02)
+
+
+from datetime import datetime, timezone
+
+INICIO_FIXO = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+
+
+def determinante(colunas):
+    (a, b, c), (d, e, f), (g, h, i) = colunas
+    return a * (e * i - f * h) - d * (b * i - c * h) + g * (b * f - c * e)
+
+
+class TestMatrizes(unittest.TestCase):
+    """A hierarquia de juntas depende de bases compostas corretamente."""
+
+    def test_eixo_angulo_tem_o_sentido_de_rotate_xyz(self):
+        p = (3.0, -2.0, 5.0)
+        for eixo, rot in (((1, 0, 0), (37, 0, 0)), ((0, 1, 0), (0, 37, 0)), ((0, 0, 1), (0, 0, 37))):
+            esperado = ap1.rotate_xyz(p, rot)
+            obtido = ap1.mat_apply(ap1.mat_axis_angle(eixo, 37.0), p)
+            for a, b in zip(esperado, obtido):
+                self.assertAlmostEqual(a, b, places=9)
+
+    def test_composicao_aplica_primeiro_a_direita(self):
+        a = ap1.mat_axis_angle((0, 0, 1), 30.0)
+        b = ap1.mat_axis_angle((1, 0, 0), 50.0)
+        p = (1.0, 2.0, 3.0)
+        direto = ap1.mat_apply(a, ap1.mat_apply(b, p))
+        for x, y in zip(direto, ap1.mat_apply(ap1.mat_mul(a, b), p)):
+            self.assertAlmostEqual(x, y, places=9)
+
+    def test_transposta_desfaz_a_rotacao(self):
+        m = ap1.mat_from_euler((23.0, -47.0, 61.0))
+        p = (4.0, -1.0, 7.5)
+        for x, y in zip(p, ap1.mat_apply_t(m, ap1.mat_apply(m, p))):
+            self.assertAlmostEqual(x, y, places=9)
+
+    def test_base_por_eixos_e_ortonormal_e_destra(self):
+        m = ap1.mat_from_axes((1.0, 2.0, 0.5), (0.0, 1.0, 1.0))
+        for col in m:
+            self.assertAlmostEqual(ap1.length(col), 1.0, places=9)
+        self.assertAlmostEqual(ap1.dot_product(m[0], m[1]), 0.0, places=9)
+        self.assertAlmostEqual(determinante(m), 1.0, places=9)
+
+    def test_base_na_malha_bate_com_euler(self):
+        b = ap1.MeshBuilder()
+        b.add_box((-10, -5, -3), (10, 5, 3), (100, 100, 100))
+        euler = ap1.PolyMesh(*b.data(), rotation=(20.0, 30.0, 40.0))
+        base = ap1.PolyMesh(*b.data(), basis=ap1.mat_from_euler((20.0, 30.0, 40.0)))
+        for p, q in zip(euler.world_vertices(), base.world_vertices()):
+            for x, y in zip(p, q):
+                self.assertAlmostEqual(x, y, places=9)
+
+
+class TestJuntasSolares(unittest.TestCase):
+    """A ideia do satélite articulado: o painel gira até encarar o Sol."""
+
+    def test_uma_junta_alinha_a_normal_com_a_projecao_do_sol(self):
+        sol = ap1.normalize((0.6, 0.8, 0.0))
+        ang = ap1.angulo_de_rastreio(ap1.IDENTIDADE, (0, 0, 1), (1, 0, 0), sol)
+        normal = ap1.mat_apply(ap1.mat_axis_angle((0, 0, 1), ang), (1, 0, 0))
+        self.assertGreater(ap1.dot_product(normal, sol), 0.9999)
+
+    def test_angulo_beta_nao_se_compensa_com_um_eixo(self):
+        sol = ap1.normalize((0.0, 0.6, 0.8))          # 53° fora do plano da junta
+        ang = ap1.angulo_de_rastreio(ap1.IDENTIDADE, (1, 0, 0), (0, 1, 0), sol)
+        normal = ap1.mat_apply(ap1.mat_axis_angle((1, 0, 0), ang), (0, 1, 0))
+        self.assertAlmostEqual(ap1.dot_product(normal, sol), 1.0, places=6)
+        sol_beta = ap1.normalize((0.8, 0.6, 0.0))      # componente de 0,8 ao longo do eixo
+        ang = ap1.angulo_de_rastreio(ap1.IDENTIDADE, (1, 0, 0), (0, 1, 0), sol_beta)
+        normal = ap1.mat_apply(ap1.mat_axis_angle((1, 0, 0), ang), (0, 1, 0))
+        self.assertAlmostEqual(ap1.dot_product(normal, sol_beta), 0.6, places=6)
+
+    def test_dupla_face_gira_no_maximo_noventa_graus(self):
+        sol = ap1.normalize((-0.9, -0.1, 0.0))
+        ang = ap1.angulo_de_rastreio(ap1.IDENTIDADE, (0, 0, 1), (1, 0, 0), sol, dupla_face=True)
+        self.assertLessEqual(abs(ang), 90.0)
+
+    def test_painel_segue_o_pai_e_estaciona_no_eclipse(self):
+        malha = ap1.PolyMesh(*ap1.build_gps_wing(1.0))
+        painel = ap1.ArticulatedPanel(malha, [ap1.Joint((0, 0, 10.0), (0, 0, 1), (1, 0, 0))], (1, 0, 0))
+        base = ap1.mat_axis_angle((0, 1, 0), 90.0)
+        sol = ap1.normalize((0.3, 0.2, -0.9))
+        painel.place((100.0, 0.0, 0.0), base, sol)
+        esperado = ap1.vec_add((100.0, 0.0, 0.0), ap1.mat_apply(base, (0, 0, 10.0)))
+        for a, b in zip(malha.pos, esperado):
+            self.assertAlmostEqual(a, b, places=9)
+        self.assertGreater(painel.incidence, 0.9)
+        painel.place((100.0, 0.0, 0.0), base, sol, shadow=1.0)
+        self.assertEqual(painel.joints[0].angle, 0.0)
+
+
+class TestViewportETelaCheia(unittest.TestCase):
+
+    def tearDown(self):
+        ap1.configurar_viewport(ap1.BASE_WIDTH, ap1.BASE_HEIGHT)
+
+    def test_viewport_acompanha_a_superficie(self):
+        self.assertTrue(ap1.configurar_viewport(1920, 1080))
+        self.assertEqual((ap1.WIDTH, ap1.HEIGHT), (1920, 1080))
+        self.assertAlmostEqual(ap1.FOV, ap1.FOV_BASE * 1.5)
+        self.assertAlmostEqual(ap1.VIEW_CENTER_X, 960.0)
+        self.assertFalse(ap1.configurar_viewport(1920, 1080))
+
+    def test_render_em_resolucao_maior_centra_o_alvo(self):
+        pygame.init()
+        cena = ap1.Scene(INICIO_FIXO)
+        superficie = pygame.Surface((1920, 1080))
+        ap1.Renderer().draw(superficie, cena)
+        px, py = ap1.project_point(tuple(cena.camera.target), cena.camera)
+        self.assertAlmostEqual(px, 960, delta=1)
+        self.assertAlmostEqual(py, 1080 * 0.53, delta=1)
+
+    def test_f11_alterna_tela_cheia_com_display(self):
+        app = ap1.App(online=False)
+        try:
+            self.assertTrue(app.toggle_fullscreen())
+            app.step(1.0 / 60.0)
+            self.assertEqual((ap1.WIDTH, ap1.HEIGHT), app.screen.get_size())
+            self.assertFalse(app.toggle_fullscreen())
+            self.assertEqual(app.screen.get_size(), (ap1.BASE_WIDTH, ap1.BASE_HEIGHT))
+        finally:
+            pygame.display.quit()
+            pygame.init()
+
+    def test_f11_em_superficie_fora_da_tela_nao_quebra(self):
+        app = ap1.App(surface=pygame.Surface((ap1.WIDTH, ap1.HEIGHT)))
+        self.assertFalse(app.toggle_fullscreen())
+
+
+class TestNiveisDeDetalheEMarcadores(unittest.TestCase):
+
+    def test_nivel_fino_so_e_construido_quando_usado(self):
+        construidos = []
+
+        def fino():
+            construidos.append(1)
+            return ap1.build_sphere(50.0, rings=20, sectors=30, exato=True)
+        malha = ap1.PolyMesh([], [], [])
+        malha.set_lods([(0.0, ap1.build_sphere(50.0, rings=4, sectors=6, exato=True)), (100.0, fino)])
+        grosso = len(malha.faces)
+        self.assertEqual(construidos, [])
+        malha.use_lod(250.0)
+        self.assertEqual(construidos, [1])
+        self.assertGreater(len(malha.faces), grosso)
+        malha.use_lod(10.0)
+        self.assertEqual(len(malha.faces), grosso)
+
+    def test_malha_menor_que_um_pixel_vira_marcador(self):
+        pygame.init()
+        cena = ap1.Scene(INICIO_FIXO)
+        cena.zoom_index = len(ap1.ZOOM_LEVELS) - 2          # Sistema Solar
+        for _ in range(30):
+            cena.update(1.0 / 60.0)
+        renderer = ap1.Renderer()
+        renderer.draw(pygame.Surface((ap1.WIDTH, ap1.HEIGHT)), cena)
+        self.assertGreater(renderer.marcadores, 5)
+
+
+class TestCenaReal(unittest.TestCase):
+    """O Sistema Solar em escala real, no instante escolhido."""
+
+    @classmethod
+    def setUpClass(cls):
+        pygame.init()
+        cls.cena = ap1.Scene(INICIO_FIXO)
+
+    def test_estacao_em_orbita_baixa_e_iluminada(self):
+        cena = self.cena
+        altitude = ap1.length(ap1.vec_sub(cena.station_km, cena.bodies["Terra"].pos_km)) - 6371.0
+        self.assertTrue(410.0 < altitude < 445.0, altitude)
+        self.assertEqual(cena.station.shadow, 0.0)
+
+    def test_terra_fica_abaixo_da_estacao(self):
+        cena = self.cena
+        para_terra = ap1.normalize(ap1.vec_sub(cena.earth.pos, cena.station_pos))
+        self.assertLess(ap1.dot_product(cena.station_basis[1], para_terra), -0.5)
+        self.assertAlmostEqual(determinante(cena.station_basis), 1.0, places=6)
+
+    def test_mesma_data_mesma_orbita(self):
+        outra = ap1.Scene(INICIO_FIXO)
+        for a, b in zip(outra.station_pos, self.cena.station_pos):
+            self.assertAlmostEqual(a, b, places=3)
+
+    def test_distancias_reais(self):
+        cena = self.cena
+        terra = cena.bodies["Terra"].pos_km
+        self.assertTrue(0.98 < ap1.length(terra) / ap1.ef.UA_KM < 1.02)
+        lua = ap1.length(ap1.vec_sub(cena.bodies["Lua"].pos_km, terra))
+        self.assertTrue(356000.0 < lua < 407500.0)
+        self.assertTrue(0.8e6 < ap1.length(cena.jwst.geo_km) < 2.0e6)
+
+    def test_satelites_reais_com_paineis(self):
+        modelos = {s.model for s in self.cena.satellites}
+        self.assertTrue({"iss", "hubble", "jwst"} <= modelos)
+        iss = next(s for s in self.cena.satellites if s.model == "iss")
+        self.assertEqual(len(iss.panels), 8)
+        self.assertGreater(sum(1 for s in self.cena.satellites if s.model == "gps"), 20)
+
+    def test_escala_de_tempo_acelera_o_relogio_orbital(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        cena.change_time_scale(2)                          # 1 h/s
+        jd0 = cena.jd
+        cena.update(1.0)
+        self.assertAlmostEqual((cena.jd - jd0) * 24.0, 1.0, places=6)
+        self.assertEqual(cena.sim_time, 0.0)               # a sequência não anda sozinha
+
+    def test_tecla_p_percorre_os_corpos(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        self.assertEqual(cena.cycle_focus(1), "Sol")
+        cena.update(1.0 / 60.0)
+        self.assertEqual(cena.camera.anchor_source, "foco:Sol")
+        self.assertEqual(cena.cycle_focus(-1), cena.focus_names()[-1])
+        cena.change_zoom(1)
+        self.assertIsNone(cena.focus_name)
+
+    def test_calota_do_horizonte_perto_e_esfera_longe(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        for _ in range(10):
+            cena.update(1.0 / 60.0)
+        self.assertIsNotNone(cena.bodies["Terra"].cap)
+        cena.zoom_index = 6                                 # Sistema interno
+        for _ in range(240):
+            cena.update(1.0 / 60.0)
+        self.assertIsNone(cena.bodies["Terra"].cap)
+
+    def test_traçados_dependem_do_enquadramento(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        self.assertEqual(cena.orbit_rings(), [])            # doca e estação: sem linhas no céu
+        cena.zoom_index = 7
+        nomes = {nome for nome, *_ in cena.orbit_rings()}
+        self.assertIn("Netuno", nomes)
+        self.assertNotIn("Órbita-2", nomes)
+
+    def test_todos_os_zooms_desenham(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        superficie = pygame.Surface((ap1.WIDTH, ap1.HEIGHT))
+        renderer = ap1.Renderer()
+        for indice, nivel in enumerate(ap1.ZOOM_LEVELS):
+            cena.zoom_index = indice
+            for _ in range(20):
+                cena.update(1.0 / 60.0)
+            renderer.draw(superficie, cena)
+            renderer.draw(superficie, cena)
+            visto = renderer.faces_desenhadas + renderer.marcadores + renderer.pontos_desenhados
+            self.assertGreater(visto, 0, msg=nivel["name"])
+
+    def test_atualizacao_online_dos_satelites(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        grupos, _ = catalogo_satelites()
+        antes = len(cena.meshes)
+        cena.update_satellite_elements(grupos, "2026-09-15T12:00Z")
+        self.assertEqual(len(cena.meshes), antes)
+        self.assertEqual(cena.satellite_data_date, "2026-09-15T12:00Z")
+
+
+def catalogo_satelites():
+    import catalogo
+    grupos, data = catalogo.satelites()
+    return {k: list(v) for k, v in grupos.items()}, data
+
+
+class TestTeclasNovasEFundo(unittest.TestCase):
+
+    def setUp(self):
+        pygame.init()
+        self.app = ap1.App(surface=pygame.Surface((ap1.WIDTH, ap1.HEIGHT)))
+
+    def tecla(self, key, mod=0):
+        self.app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key, mod=mod))
+
+    def test_app_de_teste_nao_usa_rede(self):
+        self.assertFalse(self.app.online)
+        self.assertEqual(self.app.tasks.estado("agenda")[0], "parado")
+
+    def test_relogio_orbital_pelas_teclas(self):
+        self.tecla(pygame.K_PERIOD)
+        self.assertEqual(self.app.scene.time_scale, ap1.TIME_SCALES[1][0])
+        self.tecla(pygame.K_COMMA)
+        self.tecla(pygame.K_COMMA)
+        self.assertEqual(self.app.scene.time_scale, 1.0)
+
+    def test_p_e_shift_p(self):
+        self.tecla(pygame.K_p)
+        self.assertEqual(self.app.scene.focus_name, "Sol")
+        self.tecla(pygame.K_p, pygame.KMOD_LSHIFT)
+        self.assertEqual(self.app.scene.focus_name, "Sol")
+        self.tecla(pygame.K_p, pygame.KMOD_LSHIFT)
+        self.assertEqual(self.app.scene.focus_name, self.app.scene.focus_names()[-1])
+
+    def test_v_alterna_o_fundo(self):
+        modos = []
+        for _ in range(3):
+            self.tecla(pygame.K_v)
+            modos.append(self.app.renderer.backdrop_mode)
+        self.assertEqual(modos, ["webb", "hubble", "estrelas"])
+
+    def test_imagem_do_telescopio_cobre_a_tela_e_mostra_o_credito(self):
+        imagem = pygame.Surface((400, 150))
+        imagem.fill((200, 100, 50))
+        info = {"titulo": "Imagem de teste", "credito": "ESA/Webb, NASA, CSA", "data": INICIO_FIXO,
+                "pagina": "https://esawebb.org/images/teste/", "url": "", "fonte": "webb"}
+        self.app.renderer.set_backdrop("webb", imagem, info)
+        self.app.renderer.backdrop_mode = "webb"
+        self.app.scene.zoom_index = 7                     # nada na frente dos cantos
+        self.app.step(1.0 / 60.0)
+        tela = self.app.screen
+        for canto in ((1, ap1.HEIGHT // 2), (ap1.WIDTH - 2, ap1.HEIGHT // 3)):
+            r, g, b = tela.get_at(canto)[:3]
+            self.assertGreater(r, g)
+            self.assertGreater(g, b)
+        textos = [chave[1] for chave in self.app.hud._texto_cache]
+        self.assertTrue(any("ESA/Webb, NASA, CSA" in t for t in textos))
+
+    def test_agenda_aparece_no_painel(self):
+        agora = datetime.now(timezone.utc)
+        from datetime import timedelta
+        self.app.renderer.schedule = [{"visita": "1:1:1", "inicio": agora - timedelta(minutes=5),
+                                       "fim": agora + timedelta(minutes=30), "alvo": "NGC 628",
+                                       "instrumento": "NIRCam Imaging", "categoria": "Galaxy",
+                                       "palavras": "", "tipo": "PRIME"}]
+        self.app.step(1.0 / 60.0)
+        textos = [chave[1] for chave in self.app.hud._texto_cache]
+        self.assertTrue(any(t.startswith("JAMES WEBB AGORA: NGC 628") for t in textos))
 
 
 def bench(quadros=240):
