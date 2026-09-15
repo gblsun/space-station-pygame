@@ -42,3 +42,102 @@ Uso de ferramentas avançadas (OpenGL, engines 3D etc.) não é permitido. Entre
 - Interface informando comandos, animação atual, estado e progresso.
 - Testado: iniciar, pausar, retomar, reiniciar, alternar câmera, concluir sequências, encerrar.
 - Apresentação relaciona as escolhas do projeto aos conteúdos estudados.
+
+---
+
+## Como executar
+
+```bash
+pip install -r "Atividade AP1/requirements.txt"
+python "Atividade AP1/ap1.py"
+```
+
+No Python 3.14 o `pygame` clássico não tem wheel e falha ao compilar; use
+`pip install pygame-ce`, que é compatível e também se importa como `pygame`.
+
+## Comandos de teclado
+
+| Tecla | Ação |
+|---|---|
+| `ESPAÇO` | Iniciar · pausar · retomar · reiniciar quando concluída |
+| `R` | Reiniciar a cena no estado inicial |
+| `1` `2` `3` `4` | Saltar direto para o início de cada fase |
+| `C` | Câmera — plano geral |
+| `W` / `S` | Câmera — visão superior / inferior |
+| `A` / `D` | Câmera — flanco esquerdo / direito |
+| `F` | Câmera — foco animado, acompanha o cargueiro |
+| `H` | Painel de dados do pipeline (faces, culling, câmera) |
+| `TAB` | Tela de créditos |
+| `ESC` | Encerrar |
+
+Todas as teclas disparam ações discretas. Não há navegação livre, mouse nem
+controle contínuo da cena.
+
+## A sequência (4 fases, 14 s)
+
+| Fase | Intervalo | O que acontece |
+|---|---|---|
+| 1 — Aproximação | 0 s – 4 s | O cargueiro Vega-7 se aproxima corrigindo a atitude; balizas em alerta âmbar sequencial; comporta `FECHADA`. |
+| 2 — Abertura da doca | 4 s – 7 s | Comporta `ABRINDO → ABERTA`; o cargueiro desacelera com pulsação de escala e emite partículas de retrofoguete. |
+| 3 — Acoplamento | 7 s – 10 s | O cargueiro encaixa no anel; comporta `FECHANDO → FECHADA`; balizas passam de âmbar a verde. |
+| 4 — Órbita de inspeção | 10 s – 14 s | Os quatro robôs saem em órbita helicoidal, desviando do mastro da antena, com os braços em operação; o sensor testa a linha de visão até cada um. |
+
+## Onde cada requisito obrigatório está implementado
+
+Mapa direto do §3 do enunciado para o código, para consulta durante a apresentação.
+
+| # | Requisito | Implementação em `ap1.py` |
+|---|---|---|
+| 1 | Janela, laço, FPS, Δt, encerramento | `App.run()` — `WIDTH/HEIGHT/FPS`, `clock.tick(FPS)`, `dt` limitado a 50 ms contra engasgos, saída por `ESC`/fechar janela e `pygame.quit()` |
+| 2 | ≥3 tipos de primitivas | Polígonos (faces das malhas), círculos (partículas e balizas), linhas (raios do sensor), pontos (campo estelar, `set_at`), retângulos e texto (HUD) — 6 tipos |
+| 3 | ≥5 objetos, com 3 instâncias, 1 sem partes e 1 composto | 28 malhas. **4 instâncias:** robôs MR-1 a MR-4, com escala, cor, raio orbital, velocidade e fase diferentes. **Sem partes:** Planeta Kaltus, esfera única. **Compostos:** Núcleo Órbita-2 (casco, colares, anel de doca, 2 painéis solares em grade, radiadores, treliça de antena, escotilhas, propulsores e antena parabólica), Módulo Laboratório e Cargueiro Vega-7 |
+| 4 | Translação, rotação e escala, com duas variando na animação | **Translação:** cargueiro, robôs e detritos. **Rotação:** núcleo, detritos (3 eixos), planeta, satélite, robôs e as juntas dos braços. **Escala:** pulsação do cargueiro na fase 2 e escalas distintas por robô. As três variam durante a sequência |
+| 5 | Câmera com ≥2 modos alternados por tecla | `Camera` com 5 presets fixos (`C W S A D`) mais o **foco animado** `F`, que acompanha o cargueiro quadro a quadro; toda troca é interpolada por `lerp`, não é corte seco |
+| 6 | ≥3 animações: espacial, por estados e sequência com 2+ objetos | **Espacial:** aproximação e acoplamento do cargueiro (`_animate_cargo`). **Por estados:** `DoorFSM` (`FECHADA → ABRINDO → ABERTA → FECHANDO`) aninhada na FSM geral. **Sequência com 2+ objetos:** acoplamento coordenando cargueiro, comporta e balizas, e a órbita dos 4 robôs com evitação do mastro |
+| 7 | Comandos discretos documentados | `App.handle_event` — só `KEYDOWN`; tabela de teclas acima |
+| 8 | Interface com título, comandos, estado, etapa e progresso | `Hud._draw_main` e `Hud._draw_footer`: título, estado da FSM, fase atual, estado da comporta, balizas, câmera, leitura do sensor, comandos e barra de progresso com marcas das trocas de fase |
+| 9 | Recurso de visibilidade por traçado de raio | `ray_sphere()` + `Scene.line_of_sight()`: o sensor no topo da antena dispara um raio até cada alvo e testa interseção com as esferas envolventes dos detritos e do núcleo. Linha verde quando livre, vermelha com marcador no ponto de impacto quando bloqueada; o HUD nomeia o obstáculo |
+| 10 | Créditos com integrantes, referências e variação | `Hud._draw_credits` (`TAB`): os quatro integrantes com RA e contribuição, referências dos materiais e a variação Equipe 2 — Estação Espacial |
+
+## Testes
+
+Suíte automatizada, roda sem abrir janela (usa o driver de vídeo `dummy`):
+
+```bash
+python -m unittest discover -s "Atividade AP1" -p "test_*.py" -v
+```
+
+São 89 testes, cobrindo a matemática vetorial, o winding das malhas (normais
+apontando para fora), a base ortonormal da câmera em todos os presets, o recorte
+no plano próximo, a interseção raio-esfera, a máquina de estados, as fases, a
+comporta, as balizas, a evitação de colisão, o cache de vértices, o frustum
+culling, os níveis de detalhe, os halos e a renderização em todas as câmeras.
+
+Roteiro do checklist executado de ponta a ponta, com relatório:
+
+```bash
+python "Atividade AP1/test_ap1.py" --smoke
+```
+
+Medição de desempenho, com o custo de cada etapa do quadro:
+
+```bash
+python "Atividade AP1/test_ap1.py" --bench
+```
+
+### Roteiro de teste manual (checklist do enunciado)
+
+Com a aplicação aberta, na ordem:
+
+1. **Iniciar** — `ESPAÇO`. O estado sai de `PARADO` para `EXECUTANDO` e o cargueiro começa a se aproximar.
+2. **Pausar** — `ESPAÇO`. O estado vira `PAUSADO`, o tempo para de correr e a barra de progresso congela.
+3. **Retomar** — `ESPAÇO`. Volta a `EXECUTANDO` do ponto exato em que parou.
+4. **Alternar câmera** — `W`, `S`, `A`, `D`, `C` e `F`. Em todos os modos a estação deve continuar enquadrada; a transição é suave.
+5. **Alternar animações** — `1` a `4`. Cada tecla salta para o início da fase correspondente; confira o estado da comporta no HUD em cada uma.
+6. **Concluir a sequência** — deixe chegar aos 14 s. O estado vira `CONCLUIDO` e o progresso marca 100%.
+7. **Reiniciar** — `R` a qualquer momento, ou `ESPAÇO` depois de concluída. A cena volta exatamente à pose inicial.
+8. **Créditos** — `TAB` abre e fecha.
+9. **Encerrar** — `ESC` fecha a janela.
+
+Durante a fase 4, observe o sensor no HUD: quando um robô passa atrás do núcleo
+ou de um detrito, a linha fica vermelha e o HUD nomeia o obstáculo.

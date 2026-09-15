@@ -1,0 +1,13 @@
+# Dependência única do projeto: Pygame.
+#
+# Python 3.13 ou anterior:
+#     pip install pygame
+#
+# Python 3.14 ou superior: o pygame clássico ainda não publica wheel e falha
+# ao compilar. Use o fork mantido pela comunidade, que é compatível e também
+# se importa como "pygame":
+#     pip install pygame-ce
+#
+# Escolha UMA das duas linhas abaixo (não instale as duas no mesmo ambiente):
+pygame>=2.5 ; python_version < "3.14"
+pygame-ce>=2.5 ; python_version >= "3.14"
