@@ -7,6 +7,7 @@ Cobre a matemática vetorial, o winding das malhas, a câmera look-at, o recorte
 no plano próximo e o teste de interseção raio-esfera.
 """
 
+import json
 import math
 import os
 import sys
@@ -170,6 +171,15 @@ class TestRecorteNear(unittest.TestCase):
 
 class TestGeometria(unittest.TestCase):
     """As normais precisam apontar para fora, ou o culling descarta o lado errado."""
+
+    def setUp(self):
+        # estes testes conferem a topologia exata (6 anéis, 8 lados), então
+        # fixam o detalhe em 1.0 em vez de depender do valor global da cena
+        self.detalhe = ap1.DETAIL
+        ap1.DETAIL = 1.0
+
+    def tearDown(self):
+        ap1.DETAIL = self.detalhe
 
     def assert_normais_para_fora(self, verts, faces, centro=(0.0, 0.0, 0.0), rotulo=""):
         for i, face in enumerate(faces):
@@ -867,8 +877,13 @@ class TestFrustumCulling(unittest.TestCase):
 class TestDetalheDasMalhas(unittest.TestCase):
     """DETAIL é a válvula de calibração: precisa gerar malha válida em qualquer nível."""
 
+    def setUp(self):
+        self.detalhe = ap1.DETAIL
+
     def tearDown(self):
-        ap1.DETAIL = 1.0
+        # devolve o valor que a cena usa, e não 1.0: as malhas construídas
+        # depois deste teste ficariam mais finas, e os quadros-ouro acusam
+        ap1.DETAIL = self.detalhe
 
     def test_resolucao_respeita_o_minimo(self):
         ap1.DETAIL = 0.01
@@ -1153,6 +1168,11 @@ from datetime import datetime, timezone
 INICIO_FIXO = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
 
 
+def zoom_de(nome):
+    """Índice do enquadramento pelo nome: a lista cresce, os índices mudam."""
+    return next(i for i, n in enumerate(ap1.ZOOM_LEVELS) if n["name"].startswith(nome))
+
+
 def determinante(colunas):
     (a, b, c), (d, e, f), (g, h, i) = colunas
     return a * (e * i - f * h) - d * (b * i - c * h) + g * (b * f - c * e)
@@ -1260,13 +1280,19 @@ class TestViewportETelaCheia(unittest.TestCase):
         self.assertAlmostEqual(py, 1080 * 0.53, delta=1)
 
     def test_f11_alterna_tela_cheia_com_display(self):
+        """
+        Os tamanhos exatos dependem do driver de video: o dummy do SDL 2.28 devolve
+        a resolucao da area de trabalho ao sair da tela cheia, e o do SDL 2.32 nao.
+        O que precisa valer e o estado e a projecao acompanhando a superficie.
+        """
         app = ap1.App(online=False)
         try:
             self.assertTrue(app.toggle_fullscreen())
             app.step(1.0 / 60.0)
             self.assertEqual((ap1.WIDTH, ap1.HEIGHT), app.screen.get_size())
             self.assertFalse(app.toggle_fullscreen())
-            self.assertEqual(app.screen.get_size(), (ap1.BASE_WIDTH, ap1.BASE_HEIGHT))
+            app.step(1.0 / 60.0)
+            self.assertEqual((ap1.WIDTH, ap1.HEIGHT), app.screen.get_size())
         finally:
             pygame.display.quit()
             pygame.init()
@@ -1297,7 +1323,7 @@ class TestNiveisDeDetalheEMarcadores(unittest.TestCase):
     def test_malha_menor_que_um_pixel_vira_marcador(self):
         pygame.init()
         cena = ap1.Scene(INICIO_FIXO)
-        cena.zoom_index = len(ap1.ZOOM_LEVELS) - 2          # Sistema Solar
+        cena.zoom_index = zoom_de("Sistema Solar")
         for _ in range(30):
             cena.update(1.0 / 60.0)
         renderer = ap1.Renderer()
@@ -1367,7 +1393,7 @@ class TestCenaReal(unittest.TestCase):
         for _ in range(10):
             cena.update(1.0 / 60.0)
         self.assertIsNotNone(cena.bodies["Terra"].cap)
-        cena.zoom_index = 6                                 # Sistema interno
+        cena.zoom_index = zoom_de("Sistema interno")
         for _ in range(240):
             cena.update(1.0 / 60.0)
         self.assertIsNone(cena.bodies["Terra"].cap)
@@ -1375,7 +1401,7 @@ class TestCenaReal(unittest.TestCase):
     def test_traçados_dependem_do_enquadramento(self):
         cena = ap1.Scene(INICIO_FIXO)
         self.assertEqual(cena.orbit_rings(), [])            # doca e estação: sem linhas no céu
-        cena.zoom_index = 7
+        cena.zoom_index = zoom_de("Sistema Solar")
         nomes = {nome for nome, *_ in cena.orbit_rings()}
         self.assertIn("Netuno", nomes)
         self.assertNotIn("Órbita-2", nomes)
@@ -1429,12 +1455,16 @@ class TestTeclasNovasEFundo(unittest.TestCase):
         self.assertEqual(self.app.scene.time_scale, 1.0)
 
     def test_p_e_shift_p(self):
+        """P anda do Sol para fora, Shift+P volta, e a lista e circular."""
+        nomes = self.app.scene.focus_names()
         self.tecla(pygame.K_p)
         self.assertEqual(self.app.scene.focus_name, "Sol")
+        self.tecla(pygame.K_p)
+        self.assertEqual(self.app.scene.focus_name, nomes[1])
         self.tecla(pygame.K_p, pygame.KMOD_LSHIFT)
         self.assertEqual(self.app.scene.focus_name, "Sol")
-        self.tecla(pygame.K_p, pygame.KMOD_LSHIFT)
-        self.assertEqual(self.app.scene.focus_name, self.app.scene.focus_names()[-1])
+        self.tecla(pygame.K_p, pygame.KMOD_LSHIFT)      # da a volta pelo fim
+        self.assertEqual(self.app.scene.focus_name, nomes[-1])
 
     def test_v_alterna_o_fundo(self):
         modos = []
@@ -1450,7 +1480,7 @@ class TestTeclasNovasEFundo(unittest.TestCase):
                 "pagina": "https://esawebb.org/images/teste/", "url": "", "fonte": "webb"}
         self.app.renderer.set_backdrop("webb", imagem, info)
         self.app.renderer.backdrop_mode = "webb"
-        self.app.scene.zoom_index = 7                     # nada na frente dos cantos
+        self.app.scene.zoom_index = zoom_de("Sistema Solar")   # nada na frente dos cantos
         self.app.step(1.0 / 60.0)
         tela = self.app.screen
         for canto in ((1, ap1.HEIGHT // 2), (ap1.WIDTH - 2, ap1.HEIGHT // 3)):
@@ -1472,14 +1502,390 @@ class TestTeclasNovasEFundo(unittest.TestCase):
         self.assertTrue(any(t.startswith("JAMES WEBB AGORA: NGC 628") for t in textos))
 
 
-def bench(quadros=240):
+class TestCabineDaEstacao(unittest.TestCase):
+    """O zoom continua para dentro: a cabine do núcleo, com janelas de verdade."""
+
+    @classmethod
+    def setUpClass(cls):
+        pygame.init()
+
+    def cena_na_cabine(self, camera="geral", quadros=150):
+        cena = ap1.Scene(INICIO_FIXO)
+        cena.zoom_index = zoom_de("Cabine")
+        cena.camera.go_to(camera)
+        for _ in range(quadros):
+            cena.update(1.0 / 60.0)
+        return cena
+
+    def test_casca_interna_tem_as_normais_para_dentro(self):
+        verts, faces, _cores = ap1.build_station_interior()
+        casca = 0
+        for face in faces:
+            pts = [verts[i] for i in face]
+            # a casca é o que está exatamente no raio interno; piso, racks,
+            # tampas e aros ficam de fora do teste
+            if any(abs(math.hypot(p[1], p[2]) - ap1.INTERIOR_RAIO) > 1e-6 for p in pts):
+                continue
+            radial = (0.0, sum(p[1] for p in pts) / len(pts), sum(p[2] for p in pts) / len(pts))
+            n = ap1.face_normal(pts)
+            self.assertIsNotNone(n)
+            self.assertLess(ap1.dot_product(n, radial), 0.0)
+            casca += 1
+        self.assertGreater(casca, 100)
+
+    def test_janelas_sao_buracos_na_casca(self):
+        """
+        A janela é a ausência de face: o casco externo, visto de dentro, cai no
+        back-face culling, então o buraco mostra o espaço sem geometria de vidro.
+        """
+        _verts, faces, _cores = ap1.build_station_interior()
+        paredes = ap1.INTERIOR_SEGMENTOS * ap1.INTERIOR_SETORES
+        self.assertEqual(len(ap1.INTERIOR_JANELAS), 10)
+        self.assertGreaterEqual(len(faces), paredes - len(ap1.INTERIOR_JANELAS))
+
+    def test_zoom_mais_interno_poe_a_camera_dentro_do_modulo(self):
+        cena = self.cena_na_cabine()
+        local = ap1.mat_apply_t(cena.station_basis,
+                                ap1.vec_sub(cena.camera.eye, cena.station_pos))
+        raio = math.hypot(local[1], local[2])
+        self.assertTrue(ap1.INTERIOR_X0 < local[0] < ap1.INTERIOR_X1, local)
+        self.assertLess(raio, ap1.INTERIOR_RAIO)
+        self.assertTrue(cena.interior.visible)
+        self.assertFalse(cena.station.visible)      # o casco só daria trabalho
+        self.assertEqual(ap1.NEAR, 2.0)             # 40 cm: dá para chegar no rack
+
+    def test_sair_da_cabine_devolve_o_casco_e_o_plano_proximo(self):
+        cena = self.cena_na_cabine()
+        cena.zoom_index = zoom_de("Órbita baixa")
+        for _ in range(60):
+            cena.update(1.0 / 60.0)
+        self.assertTrue(cena.station.visible)
+        self.assertFalse(cena.interior.visible)
+        self.assertEqual(ap1.NEAR, 8.0)
+
+    def test_visor_da_doca_olha_para_o_anel_de_acoplamento(self):
+        cena = self.cena_na_cabine(camera="direita")
+        frente = ap1.mat_apply_t(cena.station_basis, cena.camera.forward)
+        self.assertGreater(frente[0], 0.95)         # +X local é a doca
+
+    def test_cupula_olha_para_a_terra(self):
+        cena = self.cena_na_cabine(camera="superior")
+        para_terra = ap1.normalize(ap1.vec_sub(cena.earth.pos, cena.camera.eye))
+        self.assertGreater(ap1.dot_product(cena.camera.forward, para_terra), 0.9)
+
+    def test_cabine_desenha_em_todos_os_pontos_de_vista(self):
+        superficie = pygame.Surface((ap1.WIDTH, ap1.HEIGHT))
+        renderer = ap1.Renderer()
+        for chave in ap1.INTERIOR_PRESETS:
+            cena = self.cena_na_cabine(camera=chave, quadros=120)
+            renderer.draw(superficie, cena)
+            self.assertGreater(renderer.faces_desenhadas, 30, msg=chave)
+            self.assertEqual(cena.camera.name, ap1.INTERIOR_PRESETS[chave]["name"])
+
+    def test_luz_de_bordo_acende_a_cabine_mesmo_no_eclipse(self):
+        cena = self.cena_na_cabine()
+        self.assertIsNotNone(cena.interior.luz_local)
+        self.assertGreater(cena.interior.ambiente, ap1.AMBIENT)
+        cena.station.shadow = 1.0
+        self.assertEqual(cena.interior.shadow, 0.0)
+
+
+
+class TestLadoNoturno(unittest.TestCase):
+    """As luzes das cidades no lado escuro: a segunda paleta por face."""
+
+    def test_face_sem_sol_usa_a_paleta_noturna(self):
+        verts, faces, _cores = ap1.build_sphere(100.0, rings=6, sectors=10, exato=True)
+        dia = [(0, 0, 255)] * len(faces)
+        noite = [(255, 0, 0)] * len(faces)
+        malha = ap1.PolyMesh(verts, faces, dia, noite, position=(0.0, 0.0, 400000.0))
+        cam = ap1.Camera("geral")
+        cam.eye = [0.0, 0.0, 400900.0]          # do lado oposto ao Sol, que está na origem
+        cam.target = [0.0, 0.0, 400000.0]
+        cam._rebuild_basis()
+        visiveis, _descartadas = malha.collect(cam)
+        self.assertTrue(visiveis)
+        self.assertTrue(any(cor[0] > cor[2] for _p, _pts, cor in visiveis))
+
+    def test_terra_tem_luzes_de_cidade_e_oceano_escuro(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        cores = cena.earth.face_colors_noite
+        self.assertIsNotNone(cores)
+        self.assertTrue(any(sum(c) > 250 for c in cores), "nenhuma face com cidade acesa")
+        escuras = [c for c in cores if sum(c) < 70]
+        self.assertTrue(escuras, "nenhuma face escura: o ganho apagou o contraste")
+
+    def test_terminador_e_uma_transicao_e_nao_um_degrau(self):
+        """Entre o dia e a noite as cores se misturam, senão a linha serrilha."""
+        verts, faces, _cores = ap1.build_sphere(100.0, rings=8, sectors=16, exato=True)
+        malha = ap1.PolyMesh(verts, faces, [(0, 0, 255)] * len(faces),
+                             [(255, 0, 0)] * len(faces), position=(0.0, 0.0, 400000.0))
+        cam = ap1.Camera("geral")
+        cam.eye = [900.0, 0.0, 400000.0]         # de lado: o terminador fica no meio
+        cam.target = [0.0, 0.0, 400000.0]
+        cam._rebuild_basis()
+        visiveis, _d = malha.collect(cam)
+        misturadas = [c for _p, _pts, c in visiveis if c[0] > 20 and c[2] > 20]
+        self.assertTrue(misturadas)
+
+
+class TestFichaDoCorpo(unittest.TestCase):
+
+    def test_ficha_de_jupiter(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        while cena.focus_name != "Júpiter":
+            cena.cycle_focus(1)
+        linhas = dict((t.split("..")[0].strip(), t) for t, _titulo in cena.focus_data())
+        self.assertIn("Júpiter (planeta)", [t for t, titulo in cena.focus_data() if titulo][0])
+        self.assertIn("69 911 km", linhas["raio"])
+        self.assertIn("24.79", linhas["gravidade"])
+        self.assertTrue(4.0 < float(linhas["distância ao Sol"].split()[-2]) < 6.0)
+        self.assertTrue(10.0 < float(linhas["velocidade"].split()[-2]) < 15.0)
+
+    def test_ficha_da_iss_em_orbita_baixa(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        while cena.focus_name != "ISS":
+            cena.cycle_focus(1)
+        linhas = dict((t.split("..")[0].strip(), t) for t, _titulo in cena.focus_data())
+        self.assertIn("Terra", linhas["orbita"])
+        self.assertTrue(7.0 < float(linhas["velocidade"].split()[-2]) < 8.5)
+
+    def test_sem_foco_nao_ha_ficha(self):
+        cena = ap1.Scene(INICIO_FIXO)
+        self.assertIsNone(cena.focus_data())
+
+    def test_painel_aparece_no_hud(self):
+        pygame.init()
+        cena = ap1.Scene(INICIO_FIXO)
+        cena.cycle_focus(1)                       # Sol
+        cena.update(1.0 / 60.0)
+        hud = ap1.Hud()
+        hud.draw(pygame.Surface((ap1.WIDTH, ap1.HEIGHT)), cena, ap1.Renderer())
+        textos = [chave[1] for chave in hud._texto_cache]
+        self.assertTrue(any(t.startswith("Sol (estrela)") for t in textos))
+        self.assertTrue(any("gravidade" in t for t in textos))
+
+
+
+class TestApresentacaoAjudaEAvaliacao(unittest.TestCase):
+
+    def setUp(self):
+        pygame.init()
+        self.app = ap1.App(surface=pygame.Surface((ap1.WIDTH, ap1.HEIGHT)),
+                           inicio_utc=INICIO_FIXO)
+
+    def tecla(self, key, mod=0):
+        self.app.handle_event(pygame.event.Event(pygame.KEYDOWN, key=key, mod=mod))
+
+    def test_f9_percorre_o_roteiro_e_termina(self):
+        cena = self.app.scene
+        self.tecla(pygame.K_F9)
+        self.assertIsNotNone(cena.presentation)
+        self.assertEqual(cena.presentation_caption[1], 1)
+        vistos = set()
+        total = sum(passo["t"] for passo in ap1.PRESENTATION_SCRIPT)
+        for _ in range(int(total * 60) + 120):
+            cena.update(1.0 / 60.0)
+            if cena.presentation is not None:
+                vistos.add(cena.presentation[0])
+        self.assertEqual(len(vistos), len(ap1.PRESENTATION_SCRIPT))
+        self.assertIsNone(cena.presentation)              # termina sozinho
+        self.assertEqual(cena.time_scale, 1.0)            # e devolve o relógio
+
+    def test_roteiro_usa_enquadramentos_que_existem(self):
+        nomes = [n["name"] for n in ap1.ZOOM_LEVELS]
+        for passo in ap1.PRESENTATION_SCRIPT:
+            self.assertTrue(any(n.startswith(passo["zoom"]) for n in nomes), passo["zoom"])
+            self.assertIn(passo["camera"], ap1.CAMERA_PRESETS)
+
+    def test_qualquer_tecla_encerra_a_apresentacao(self):
+        self.tecla(pygame.K_F9)
+        self.assertIsNotNone(self.app.scene.presentation)
+        self.tecla(pygame.K_z)
+        self.assertIsNone(self.app.scene.presentation)
+
+    def test_legenda_aparece_no_hud(self):
+        self.tecla(pygame.K_F9)
+        self.app.step(1.0 / 60.0)
+        textos = [chave[1] for chave in self.app.hud._texto_cache]
+        self.assertTrue(any("Modo apresentação 1/" in t for t in textos))
+
+    def test_f1_mostra_todos_os_comandos(self):
+        self.tecla(pygame.K_F1)
+        self.assertTrue(self.app.hud.show_help)
+        self.app.step(1.0 / 60.0)
+        textos = " | ".join(chave[1] for chave in self.app.hud._texto_cache)
+        for tecla in ("ESPAÇO", "Z / X", "P / Shift+P", "F11", "F9", "TAB"):
+            self.assertIn(tecla, textos)
+        self.tecla(pygame.K_F1)
+        self.assertFalse(self.app.hud.show_help)
+
+    def test_f2_lista_os_dez_requisitos(self):
+        self.tecla(pygame.K_F2)
+        self.app.step(1.0 / 60.0)
+        textos = [chave[1] for chave in self.app.hud._texto_cache]
+        self.assertTrue(any("MODO AVALIAÇÃO" in t for t in textos))
+        numeros = {t.strip() for t in textos if t.strip().isdigit()}
+        self.assertTrue({"1", "5", "9", "10"} <= numeros)
+
+
+
+class TestCometasLagrangeEEclipses(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        pygame.init()
+        cls.cena = ap1.Scene(INICIO_FIXO)
+
+    def test_cauda_aponta_para_longe_do_sol_e_cresce_perto(self):
+        caudas = self.cena.comet_tails()
+        self.assertTrue(caudas, "nenhum cometa dentro de 4 UA")
+        for pos, direcao, comprimento, _cor in caudas:
+            do_sol = ap1.normalize(ap1.vec_sub(pos, ap1.SUN_POS))
+            self.assertGreater(ap1.dot_product(direcao, do_sol), 0.999)
+            self.assertGreater(comprimento, 0.0)
+
+    def test_lagrange_em_sessenta_graus_de_jupiter(self):
+        jupiter = self.cena.bodies["Júpiter"].mesh.pos
+        pontos = dict(self.cena.lagrange_points())
+        self.assertEqual(set(pontos), {"Troianos L4", "Troianos L5"})
+        for nome, pos in pontos.items():
+            self.assertAlmostEqual(ap1.length(pos), ap1.length(jupiter), delta=ap1.length(jupiter) * 1e-6)
+            cosseno = (ap1.dot_product(pos, jupiter) / (ap1.length(pos) * ap1.length(jupiter)))
+            self.assertAlmostEqual(math.degrees(math.acos(min(1.0, cosseno))), 60.0, delta=0.5)
+
+    def test_proximo_eclipse_existe_e_esta_a_frente(self):
+        achado = self.cena.next_eclipse()
+        self.assertIsNotNone(achado)
+        jd, tipo = achado
+        self.assertGreater(jd, self.cena.jd)
+        self.assertLess(jd - self.cena.jd, 400.0)          # há eclipse toda temporada
+        self.assertIn(tipo, ("lunar", "solar"))
+
+    def test_rastro_no_solo_fica_na_superficie(self):
+        raio = self.cena.earth.bounding_radius * 1.004
+        pontos = self.cena.ground_track(raio)
+        self.assertEqual(len(pontos), 73)
+        for p in pontos:
+            d = ap1.length(ap1.vec_sub(p, self.cena.earth.pos))
+            self.assertAlmostEqual(d, raio, delta=raio * 1e-6)
+
+    def test_terminador_e_perpendicular_ao_sol(self):
+        raio = self.cena.earth.bounding_radius
+        terra = self.cena.bodies["Terra"].pos_km
+        para_o_sol = ap1.normalize(ap1.ef.direcao_para_mundo(ap1.vec_scale(terra, -1.0)))
+        for p in self.cena.terminator(raio):
+            radial = ap1.normalize(ap1.vec_sub(p, self.cena.earth.pos))
+            self.assertAlmostEqual(ap1.dot_product(radial, para_o_sol), 0.0, places=6)
+
+
+
+# ------------------------------------------------------------------ quadros-ouro
+ASSINATURAS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dados",
+                           "assinaturas.json")
+ASSINATURA_LARGURA, ASSINATURA_ALTURA = 480, 320
+ASSINATURA_BLOCOS = (12, 8)
+
+
+def assinatura_do_quadro(superficie):
+    """
+    Assinatura visual: a média de cada bloco, quantizada em 16 níveis. Pega
+    mudança de composição e de cor sem depender do valor exato de cada pixel,
+    que varia entre versões do SDL.
+    """
+    largura, altura = superficie.get_size()
+    colunas, linhas = ASSINATURA_BLOCOS
+    valores = []
+    for j in range(linhas):
+        for i in range(colunas):
+            bloco = superficie.subsurface((i * largura // colunas, j * altura // linhas,
+                                           largura // colunas, altura // linhas))
+            media = pygame.transform.average_color(bloco)
+            valores.append([int(c) // 16 for c in media[:3]])
+    return valores
+
+
+def quadro_de_referencia(indice_zoom):
+    """Renderiza um enquadramento em data fixa, sem HUD (a fonte varia por sistema)."""
+    cena = ap1.Scene(INICIO_FIXO)
+    cena.zoom_index = indice_zoom
+    for _ in range(90):
+        cena.update(1.0 / 60.0)
+    superficie = pygame.Surface((ASSINATURA_LARGURA, ASSINATURA_ALTURA))
+    renderer = ap1.Renderer()
+    renderer.draw(superficie, cena)
+    renderer.draw(superficie, cena)          # o segundo quadro já tem as nuvens propagadas
+    ap1.configurar_viewport(ap1.BASE_WIDTH, ap1.BASE_HEIGHT)
+    return superficie
+
+
+def gerar_assinaturas():
+    """python test_ap1.py --assinaturas — regrava a referência depois de uma mudança visual."""
+    pygame.init()
+    referencia = {}
+    for indice, nivel in enumerate(ap1.ZOOM_LEVELS):
+        referencia[nivel["name"]] = assinatura_do_quadro(quadro_de_referencia(indice))
+        print("  %s" % nivel["name"])
+    with open(ASSINATURAS, "w", encoding="utf-8") as arq:
+        json.dump({"gerado_em": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
+                   "instante": INICIO_FIXO.strftime("%Y-%m-%dT%H:%MZ"),
+                   "blocos": list(ASSINATURA_BLOCOS), "quadros": referencia}, arq)
+    print("assinaturas gravadas em dados/assinaturas.json")
+    return 0
+
+
+class TestQuadrosOuro(unittest.TestCase):
+    """
+    Compara cada enquadramento com uma assinatura guardada. Não substitui olhar
+    a tela, mas pega o tipo de regressão que passa pelos outros testes: uma
+    malha que sumiu, uma cor que virou preta, a câmera apontando para o lado.
+
+    Depois de uma mudança visual deliberada:
+        python "Atividade AP1/test_ap1.py" --assinaturas
+    """
+
+    TOLERANCIA_BLOCO = 3        # níveis (de 16) de diferença aceitos por bloco
+    TOLERANCIA_QUADRO = 0.14    # fração dos blocos que pode passar disso (SDL varia entre versões)
+
+    @classmethod
+    def setUpClass(cls):
+        pygame.init()
+        try:
+            with open(ASSINATURAS, encoding="utf-8") as arq:
+                cls.referencia = json.load(arq)
+        except (OSError, ValueError):
+            cls.referencia = None
+
+    def test_enquadramentos_batem_com_a_referencia(self):
+        if self.referencia is None:
+            self.skipTest("dados/assinaturas.json ausente: rode --assinaturas")
+        quadros = self.referencia["quadros"]
+        for indice, nivel in enumerate(ap1.ZOOM_LEVELS):
+            esperado = quadros.get(nivel["name"])
+            if esperado is None:
+                continue
+            obtido = assinatura_do_quadro(quadro_de_referencia(indice))
+            fora = sum(1 for a, b in zip(esperado, obtido)
+                       if max(abs(x - y) for x, y in zip(a, b)) > self.TOLERANCIA_BLOCO)
+            self.assertLessEqual(
+                fora / len(esperado), self.TOLERANCIA_QUADRO,
+                msg="%s mudou em %d de %d blocos; se foi de propósito, rode --assinaturas"
+                    % (nivel["name"], fora, len(esperado)))
+
+def bench(quadros=240, resolucao=None, max_ms=None):
     """
     Mede o custo de um quadro completo, sem janela. O orçamento a 60 FPS é de
     16,7 ms; o painel [H] da aplicação mostra os mesmos contadores em execução.
+
+        python test_ap1.py --bench --res 1920x1080 --max-ms 40
+
+    Com `--max-ms`, devolve código de saída 1 se a mediana passar do limite: é
+    assim que o CI pega uma regressão grande de desempenho.
     """
     import time
     pygame.init()
-    surf = pygame.Surface((ap1.WIDTH, ap1.HEIGHT))
+    largura, altura = resolucao or (ap1.WIDTH, ap1.HEIGHT)
+    surf = pygame.Surface((largura, altura))
     cena = ap1.Scene()
     cena.state = ap1.STATE_EXECUTANDO
     renderer, hud = ap1.Renderer(), ap1.Hud()
@@ -1516,6 +1922,10 @@ def bench(quadros=240):
           % (mediana / 16.67 * 100, 16.67 - mediana))
     print("  faces desenhadas %d | descartadas %d"
           % (renderer.faces_desenhadas, renderer.faces_descartadas))
+    ap1.configurar_viewport(ap1.BASE_WIDTH, ap1.BASE_HEIGHT)
+    if max_ms is not None and mediana > max_ms:
+        print("REGRESSÃO: mediana %.2f ms acima do limite de %.1f ms" % (mediana, max_ms))
+        return 1
     return 0
 
 
@@ -1604,9 +2014,20 @@ def smoke():
     return 0 if not app.running else 1
 
 
+def _argumento(nome, conversor, padrao=None):
+    """Lê --opção valor da linha de comando."""
+    if nome not in sys.argv:
+        return padrao
+    indice = sys.argv.index(nome) + 1
+    return conversor(sys.argv[indice]) if indice < len(sys.argv) else padrao
+
+
 if __name__ == "__main__":
     if "--smoke" in sys.argv:
         sys.exit(smoke())
+    if "--assinaturas" in sys.argv:
+        sys.exit(gerar_assinaturas())
     if "--bench" in sys.argv:
-        sys.exit(bench())
+        res = _argumento("--res", lambda t: tuple(int(v) for v in t.lower().split("x")))
+        sys.exit(bench(resolucao=res, max_ms=_argumento("--max-ms", float)))
     unittest.main(verbosity=2)

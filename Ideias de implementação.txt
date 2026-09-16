@@ -1,1 +1,27 @@
 - satelite com articulação. -> painel solar. que segue o sol (talvez?)
+  FEITO: juntas de um e dois eixos. A ISS combina a junta da treliça com a de cada asa,
+  o GPS gira o corpo e depois a asa, o Hubble mantém o eixo perpendicular ao Sol e o
+  James Webb mantém o escudo de frente para ele. Os painéis da Órbita-2 também seguem.
+  Na sombra da Terra as juntas voltam a zero.
+
+- mostrar o sistema solar inteiro, com posições reais de hoje.
+  FEITO: planetas pelos elementos do JPL, luas, anões, ~4.100 asteroides e cometas do
+  SBDB, satélites reais do CelesTrak e estrelas do Yale Bright Star Catalogue.
+
+- mostrar atrás o que o James Webb ou o Hubble está vendo.
+  FEITO: imagem mais recente do ESA/Webb e do ESA/Hubble cobrindo o fundo (tecla V), com
+  o crédito exigido pela licença, e a agenda oficial do STScI dizendo o alvo de agora.
+  A tecla K põe a câmera atrás do espelho, apontada para esse alvo.
+
+- tela cheia.
+  FEITO: F11, na resolução nativa do monitor, com o HUD escalando junto.
+
+- dar zoom até entrar dentro da nave, com detalhes lá dentro.
+  FEITO: o enquadramento mais interno é a cabine do núcleo — corredor, cúpula virada
+  para a Terra, bancada, racks e os dois visores. As janelas são ausência de face: o
+  casco, visto de dentro, cai no back-face culling e deixa o espaço aparecer.
+
+Próximas ideias (não feitas):
+- ampliar os corpos por um fator didático, mantendo as órbitas reais
+- gravar uma sequência de quadros para montar o vídeo da apresentação
+- luas de Plutão além de Caronte, e os anéis de Júpiter e Netuno

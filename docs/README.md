@@ -10,7 +10,9 @@ Entregas documentais previstas no §5 do enunciado, além do README principal.
 | [04-roteiro-animacoes.md](04-roteiro-animacoes.md) | 2 | Roteiro fase a fase, com os tempos de cada animação |
 | [05-roteiro-apresentacao.md](05-roteiro-apresentacao.md) | 3 | Roteiro da apresentação de 5 a 8 minutos |
 
-As figuras em [img/](img/) são geradas pelo próprio motor gráfico:
+As figuras em [img/](img/) são geradas pelo próprio motor gráfico — a planta do
+referencial da estação, a folha de contato das quatro fases e o Sistema Solar na posição
+do dia em que o script roda:
 
 ```bash
 python docs/gerar_figuras.py

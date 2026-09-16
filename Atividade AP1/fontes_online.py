@@ -298,6 +298,40 @@ def imagem_mais_recente(fonte, largura_tela):
             "credito": credito, "url": url, "pagina": item["pagina"]}
 
 
+SESAME = "https://cds.unistra.fr/cgi-bin/nph-sesame/-oI/A?%s"
+# prefixos que o STScI usa nos nomes de alvo e que o resolvedor não entende
+_PREFIXOS_ALVO = ("NAME-", "NAME ", "V*-", "V* ", "CL-", "CL ", "*-", "* ")
+
+
+def resolver_alvo(nome):
+    """
+    Nome de alvo -> (ascensão reta, declinação) em graus, pelo resolvedor Sesame
+    do CDS. Os nomes da agenda do Webb vêm com prefixos e hifens no lugar de
+    espaços; as variantes são tentadas na ordem até uma responder.
+    """
+    limpo = nome.strip()
+    for prefixo in _PREFIXOS_ALVO:
+        if limpo.upper().startswith(prefixo):
+            limpo = limpo[len(prefixo):]
+            break
+    variantes = [limpo, limpo.replace("-", " "), limpo.replace("-", "")]
+    for variante in dict.fromkeys(v for v in variantes if v):
+        try:
+            texto, _idade = com_cache("alvo-%s.txt" % re.sub(r"[^A-Za-z0-9]+", "_", variante),
+                                      30 * 24 * 3600,
+                                      lambda v=variante: baixar(SESAME % urllib.parse.quote(v)))
+        except ErroDeFonte:
+            continue
+        for linha in texto.decode("utf-8", "replace").splitlines():
+            if linha.startswith("%J "):
+                partes = linha.split()
+                try:
+                    return float(partes[1]), float(partes[2])
+                except (IndexError, ValueError):
+                    continue
+    raise ErroDeFonte("alvo não resolvido: %s" % nome)
+
+
 # ============================================================
 # 5. AGENDA DO JAMES WEBB (STScI)
 # ============================================================

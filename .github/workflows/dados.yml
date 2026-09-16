@@ -1,0 +1,51 @@
+# Atualiza os snapshots de dados/ uma vez por semana e abre um PR quando algo
+# muda. Os elementos dos satélites envelhecem em dias, e os das luas em meses.
+name: Atualizar dados reais
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"      # toda segunda-feira, 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    env:
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências
+        run: pip install -r "Atividade AP1/requirements.txt"
+
+      - name: Baixar elementos e imagens
+        run: python "Atividade AP1/ferramentas/baixar_dados.py" satelites jwst luas pequenos
+
+      - name: Conferir que a cena ainda roda com os dados novos
+        run: |
+          python -m unittest discover -s "Atividade AP1" -p "test_*.py"
+          python "Atividade AP1/test_ap1.py" --smoke
+
+      - name: Abrir PR com os dados novos
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: dados/atualizacao-semanal
+          title: "Atualizar elementos orbitais e efemérides"
+          commit-message: "Atualizar snapshots de dados reais (rotina semanal)"
+          body: |
+            Atualização automática dos snapshots em `Atividade AP1/dados/`:
+            elementos dos satélites (CelesTrak), vetores do James Webb e
+            elementos de luas e pequenos corpos (JPL Horizons).
+
+            A suíte e o roteiro do checklist rodaram com os dados novos.
+          add-paths: |
+            Atividade AP1/dados/**
