@@ -68,6 +68,27 @@ PEQUENOS = {
     "Tempel 1": (3.0, (180, 220, 255)), "Hale-Bopp": (30.0, (180, 220, 255)),
 }
 
+# Dados físicos para a ficha do corpo em foco (tecla P): massa em kg, gravidade
+# na superfície em m/s² e período de rotação em horas (negativo = retrógrado).
+# Fontes: NASA Planetary Fact Sheets e JPL Solar System Dynamics.
+FISICA = {
+    "Sol": (1.989e30, 274.0, 609.12), "Mercúrio": (3.301e23, 3.70, 1407.6),
+    "Vênus": (4.867e24, 8.87, -5832.5), "Terra": (5.972e24, 9.81, 23.934),
+    "Marte": (6.417e23, 3.71, 24.623), "Júpiter": (1.898e27, 24.79, 9.925),
+    "Saturno": (5.683e26, 10.44, 10.656), "Urano": (8.681e25, 8.87, -17.24),
+    "Netuno": (1.024e26, 11.15, 16.11), "Lua": (7.346e22, 1.62, 655.72),
+    "Plutão": (1.303e22, 0.62, -153.29), "Ceres": (9.38e20, 0.28, 9.07),
+    "Éris": (1.66e22, 0.82, 25.9), "Haumea": (4.01e21, 0.63, 3.92),
+    "Makemake": (3.1e21, 0.5, 22.83),
+    "Io": (8.932e22, 1.80, 42.46), "Europa": (4.800e22, 1.31, 85.22),
+    "Ganimedes": (1.482e23, 1.43, 171.71), "Calisto": (1.076e23, 1.24, 400.54),
+    "Titã": (1.345e23, 1.35, 382.69), "Encélado": (1.08e20, 0.11, 32.89),
+    "Tritão": (2.14e22, 0.78, -141.04), "Caronte": (1.586e21, 0.29, 153.29),
+    "Fobos": (1.06e16, 0.0057, 7.65), "Deimos": (1.8e15, 0.003, 30.31),
+    "Vesta": (2.59e20, 0.25, 5.34), "Palas": (2.04e20, 0.21, 7.81),
+    "Halley": (2.2e14, 0.0004, 52.8),
+}
+
 # Anéis: (raio interno, raio externo) em km, no equador do planeta
 ANEIS = {"Saturno": (66900.0, 136775.0), "Urano": (41800.0, 51150.0)}
 

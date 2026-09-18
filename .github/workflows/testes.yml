@@ -31,3 +31,8 @@ jobs:
 
       - name: Roteiro do checklist
         run: python "Atividade AP1/test_ap1.py" --smoke
+
+      # O runner do GitHub é bem mais lento que uma máquina de mesa: o limite
+      # aqui pega regressão grosseira, não variação de alguns milissegundos.
+      - name: Orçamento de desempenho
+        run: python "Atividade AP1/test_ap1.py" --bench --max-ms 60

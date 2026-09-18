@@ -311,6 +311,10 @@ STATION_INCLINATION = 51.6
 # ficaria na borda de baixo da tela, escondido pelo rodapé do HUD.
 STATION_PITCH = 32.0
 
+# Observador em solo para o cálculo de passagem da ISS: (nome, latitude,
+# longitude, altitude em km). Troque pela cidade de quem for apresentar.
+LOCAL_OBSERVADOR = ("São Paulo", -23.55, -46.63, 0.76)
+
 
 def orbit_point(centro, raio, angulo, inclinacao):
     """
@@ -353,6 +357,42 @@ ORBITAL_PRESETS = {
     "esquerda": {"eye": (-660.0, 150.0, -160.0), "target": (0.0, 0.0, 0.0)},
     "direita":  {"eye": (660.0, 150.0, -160.0),  "target": (0.0, 0.0, 0.0)},
 }
+# Dentro do módulo as mesmas teclas de câmera viram pontos de vista da cabine.
+# Olho e alvo estão em unidades locais da estação, e não em múltiplos do zoom.
+# A cúpula fica no vão do deck, entre x = -61 e x = -17, virada para o nadir; o
+# visor da doca é a escotilha de +X, por onde o cargueiro aparece na fase 3.
+INTERIOR_PRESETS = {
+    "geral":    {"name": "Corredor do Núcleo [C]",  "eye": (-82.0, 2.0, 0.0),
+                 "target": (56.0, -4.0, 0.0)},
+    "superior": {"name": "Cúpula, olhando a Terra [W]", "eye": (-39.0, -26.0, 4.0),
+                 "target": (-39.0, -128.0, 68.0)},
+    "inferior": {"name": "Bancada de trabalho [S]", "eye": (-14.0, -6.0, -12.0),
+                 "target": (-2.0, -8.0, 34.0)},
+    "esquerda": {"name": "Escotilha do Laboratório [A]", "eye": (-58.0, 0.0, 0.0),
+                 "target": (-160.0, 0.0, 0.0)},
+    "direita":  {"name": "Visor da Doca [D]", "eye": (34.0, 0.0, 0.0),
+                 "target": (170.0, 0.0, 0.0)},
+}
+
+# Olho do telescópio (tecla K): a câmera senta atrás do espelho e olha na
+# direção em que a nave realmente aponta.
+# Em [C] a câmera passa do espelho secundário e olha na direção do apontamento:
+# é o que o telescópio vê. As outras teclas mostram a nave contra esse mesmo céu.
+OCULAR_PRESETS = {
+    "geral":    {"name": "Pelo olho do telescópio [K]", "eye": (58.0, 0.0, 0.0),
+                 "target": (5000.0, 0.0, 0.0)},
+    "superior": {"name": "Telescópio, de cima [K]", "eye": (-110.0, 96.0, 0.0),
+                 "target": (60.0, 0.0, 0.0)},
+    "inferior": {"name": "Telescópio, por baixo [K]", "eye": (-110.0, -96.0, 0.0),
+                 "target": (60.0, 0.0, 0.0)},
+    # -Z é o lado frio: é de lá que se vê o espelho dourado; +Z é o lado do Sol,
+    # com o escudo, o barramento e o painel solar
+    "esquerda": {"name": "Telescópio, lado do espelho [K]", "eye": (-30.0, 20.0, -150.0),
+                 "target": (40.0, 0.0, 0.0)},
+    "direita":  {"name": "Telescópio, lado do Sol [K]", "eye": (-40.0, 24.0, 150.0),
+                 "target": (60.0, 0.0, 0.0)},
+}
+
 PRESET_DISTANCE = 703.0                 # comprimento do olho do plano geral
 DEFAULT_CAMERA = "geral"
 FOLLOW_CAMERA = "foco"
@@ -371,6 +411,7 @@ def escala_para_km(distancia_km):
 # Da comporta de doca, a 40 m, até o Cinturão de Kuiper, a 190 UA — sem mudar a
 # escala do mundo, só a da câmera.
 ZOOM_LEVELS = (
+    {"name": "Cabine (interior)",  "anchor": "station", "scale": 1.0, "interior": True},
     {"name": "Doca",               "anchor": "station", "scale": 0.30},
     {"name": "Estação",            "anchor": "station", "scale": 1.00},
     {"name": "Vizinhança (3 km)",  "anchor": "station", "scale": escala_para_km(3.0)},
@@ -381,7 +422,37 @@ ZOOM_LEVELS = (
     {"name": "Sistema Solar",      "anchor": "sun",     "scale": escala_para_km(68.0 * ef.UA_KM)},
     {"name": "Kuiper e além",      "anchor": "sun",     "scale": escala_para_km(190.0 * ef.UA_KM)},
 )
-DEFAULT_ZOOM = 1
+DEFAULT_ZOOM = 2
+
+# Roteiro do modo apresentação (F9): a máquina conduz a demonstração de 5 a 8
+# minutos que o enunciado pede, e a equipe narra. Cada passo diz quanto tempo
+# fica, que enquadramento e câmera usa, o que dispara e o que a legenda conta.
+PRESENTATION_SCRIPT = (
+    {"t": 12.0, "zoom": "Cabine", "camera": "superior", "acao": "parar",
+     "legenda": "Estação Órbita-2, 420 km de altitude: a Terra vista da cúpula, agora"},
+    {"t": 10.0, "zoom": "Cabine", "camera": "geral",
+     "legenda": "A cabine do núcleo: casca, racks e corrimãos, com luz de bordo própria"},
+    {"t": 14.0, "zoom": "Doca", "camera": "geral", "acao": "iniciar",
+     "legenda": "Fases 1 a 3: aproximação, comporta com máquina de estados e acoplamento"},
+    {"t": 10.0, "zoom": "Cabine", "camera": "direita",
+     "legenda": "O mesmo acoplamento visto de dentro, pelo visor da escotilha de doca"},
+    {"t": 12.0, "zoom": "Estação", "camera": "direita", "acao": "fase4",
+     "legenda": "Fase 4: quatro robôs em órbita de inspeção; o sensor traça a linha de visão"},
+    {"t": 10.0, "zoom": "Estação", "camera": "superior",
+     "legenda": "Os painéis solares seguem o Sol por juntas, como as da ISS"},
+    {"t": 12.0, "zoom": "Órbita baixa", "camera": "geral", "acao": "acelerar",
+     "legenda": "Órbita real de 92 minutos: o terminador e as luzes das cidades passam embaixo"},
+    {"t": 12.0, "zoom": "Terra e satélites", "camera": "geral",
+     "legenda": "Satélites reais do CelesTrak: estações, GNSS, geoestacionários e Starlink"},
+    {"t": 12.0, "zoom": "Terra, Lua e L2", "camera": "geral",
+     "legenda": "A Lua pela fórmula do Astronomical Almanac e o James Webb em L2"},
+    {"t": 14.0, "zoom": "Sistema interno", "camera": "superior",
+     "legenda": "Sistema Solar interno na posição de hoje, com milhares de asteroides reais"},
+    {"t": 14.0, "zoom": "Sistema Solar", "camera": "superior",
+     "legenda": "Os oito planetas pelos elementos do JPL, cada um no lugar onde está agora"},
+    {"t": 12.0, "zoom": "Kuiper", "camera": "superior", "acao": "tempo real",
+     "legenda": "Cinturão de Kuiper, planetas anões e cometas: o fim do passeio"},
+)
 
 
 def _interpolar_deslocamento(atual, meta, k):
@@ -455,13 +526,12 @@ class Camera:
         if self.key == FOLLOW_CAMERA:
             return
         p = self.presets[self.key]
-        self.name = CAMERA_PRESETS[self.key]["name"]
+        self.name = p.get("name", CAMERA_PRESETS[self.key]["name"])
         self.eye_offset = p["eye"]
         self.target_offset = p["target"]
 
-    def usar_presets_orbitais(self, orbital):
-        """Troca a tabela de presets entre a da estação e a dos enquadramentos orbitais."""
-        tabela = ORBITAL_PRESETS if orbital else CAMERA_PRESETS
+    def usar_tabela(self, tabela):
+        """Troca a tabela de enquadramentos: estação, órbita ou interior da cabine."""
         if tabela is not self.presets:
             self.presets = tabela
             self._aplicar_preset()
@@ -602,6 +672,16 @@ def frustum_planes():
 FRUSTUM_PLANES = frustum_planes()
 
 
+def definir_near(valor):
+    """
+    Plano próximo. Fora, 8 u (1,6 m) evita polígonos gigantes colados à câmera;
+    dentro do módulo, 1 u (20 cm) é o que permite chegar perto de um rack sem
+    ele desaparecer.
+    """
+    global NEAR
+    NEAR = valor
+
+
 def configurar_viewport(largura, altura):
     """
     Ajusta a projeção a uma superfície de outro tamanho. A distância focal
@@ -703,12 +783,15 @@ class PolyMesh:
     tamanho projetado.
     """
 
-    def __init__(self, vertices, faces, face_colors, position=(0, 0, 0),
-                 rotation=(0, 0, 0), scale=1.0, name="", gloss=0.30, basis=None,
-                 marker_color=None, marker_size=2, edges=True):
+    def __init__(self, vertices, faces, face_colors, face_colors_noite=None,
+                 position=(0, 0, 0), rotation=(0, 0, 0), scale=1.0, name="", gloss=0.30,
+                 basis=None, marker_color=None, marker_size=2, edges=True, ambiente=None):
         self.base_vertices = list(vertices)
         self.faces = list(faces)
         self.face_colors = list(face_colors)
+        # segunda paleta, usada onde o Sol não bate: é assim que as luzes das
+        # cidades aparecem no lado escuro sem nenhuma textura
+        self.face_colors_noite = list(face_colors_noite) if face_colors_noite else None
         self.pos = list(position)
         self.rotation = list(rotation)
         self.scale = scale
@@ -722,6 +805,10 @@ class PolyMesh:
         # contorno claro nas faces grandes: dá leitura de facetas às naves, mas
         # num planeta desenharia a grade da malha por cima do mapa
         self.edges = edges
+        # dentro do módulo a luz não vem do Sol: `luz_local` é a direção da
+        # luminária no mundo e `ambiente` sobe, senão a cabine fica preta
+        self.luz_local = None
+        self.ambiente = ambiente
         # raio da esfera envolvente em espaço local (multiplicado pela escala
         # no acesso), usado pelo teste de linha de visão
         self.local_radius = max((length(v) for v in self.base_vertices), default=0.0)
@@ -750,11 +837,12 @@ class PolyMesh:
                 self.rotation[0], self.rotation[1], self.rotation[2], self.scale,
                 self.basis, self._lod_atual)
 
-    def set_geometry(self, vertices, faces, face_colors):
+    def set_geometry(self, vertices, faces, face_colors, face_colors_noite=None):
         """Troca a geometria (nível de detalhe, calota do horizonte) e invalida o cache."""
         self.base_vertices = vertices
         self.faces = faces
         self.face_colors = face_colors
+        self.face_colors_noite = face_colors_noite
         self.local_radius = max((length(v) for v in vertices), default=0.0)
         self._pose_cache = None
 
@@ -857,7 +945,7 @@ class PolyMesh:
         # a luz vem da posição do Sol, então a direção muda de objeto para
         # objeto; basta calculá-la uma vez por malha e levá-la ao espaço de
         # câmera junto com o vetor intermediário do realce especular
-        luz = normalize(vec_sub(SUN_POS, self.pos))
+        luz = self.luz_local or normalize(vec_sub(SUN_POS, self.pos))
         if luz == (0.0, 0.0, 0.0):
             luz = LIGHT_DIR
         lvx = luz[0] * rx + luz[1] * ry + luz[2] * rz
@@ -866,6 +954,7 @@ class PolyMesh:
         hvx, hvy, hvz = normalize((lvx, lvy, lvz - 1.0))
         fvx, fvy, fvz = camera.fill_view
         # o eclipse apaga a luz direta, mas não o ambiente
+        ambiente = AMBIENT if self.ambiente is None else self.ambiente
         direta = DIFFUSE_WEIGHT * (1.0 - 0.94 * self.shadow)
         gloss = self.gloss * (1.0 - self.shadow)
         peso_r, peso_g, peso_b = FILL_WEIGHT
@@ -890,6 +979,7 @@ class PolyMesh:
         testar_recorte = z_minimo < NEAR
 
         cores = self.face_colors
+        noturnas = self.face_colors_noite
         prontas = []
         descartadas = 0
         for idx, face in enumerate(self.faces):
@@ -963,7 +1053,16 @@ class PolyMesh:
                 prontas.append((soma / len(poly), pontos, cores[idx]))
                 continue
             difusa = nx * lvx + ny * lvy + nz * lvz
-            base = AMBIENT + direta * difusa if difusa > 0.0 else AMBIENT
+            if noturnas is not None and difusa < 0.16:
+                # terminador: mistura contínua entre o lado iluminado e o noturno,
+                # senão a linha dia/noite vira um degrau serrilhado de faces
+                k = clamp(difusa / 0.16, 0.0, 1.0)
+                dia, noite = cores[idx], noturnas[idx]
+                cor_face = (int(lerp(noite[0], dia[0], k)), int(lerp(noite[1], dia[1], k)),
+                            int(lerp(noite[2], dia[2], k)))
+                prontas.append((soma / len(poly), pontos, cor_face))
+                continue
+            base = ambiente + direta * difusa if difusa > 0.0 else ambiente
             if gloss:
                 s = nx * hvx + ny * hvy + nz * hvz
                 if s > 0.0:
@@ -1377,6 +1476,7 @@ class ColorMap:
     def __init__(self, superficie):
         self.surface = superficie
         self.w, self.h = superficie.get_size()
+        self._reduzidos = {}
 
     @classmethod
     def load(cls, nome):
@@ -1412,6 +1512,60 @@ class ColorMap:
         n = len(direcoes)
         return (r // n, g // n, b // n)
 
+    def reduzido(self, largura, altura):
+        """
+        Versão reduzida (média em blocos, feita pelo Pygame), guardada em cache.
+        As luzes das cidades ocupam meio por cento do mapa: amostrar pontos
+        soltos quase sempre erra todas, mas a média de um bloco já as carrega.
+        """
+        chave = (largura, altura)
+        pronto = self._reduzidos.get(chave)
+        if pronto is None:
+            pronto = ColorMap(pygame.transform.smoothscale(self.surface, (largura, altura)))
+            self._reduzidos[chave] = pronto
+        return pronto
+
+    def brightest(self, direcoes):
+        """
+        Pico entre as amostras. As luzes das cidades ocupam poucos pixels do
+        mapa; numa face que cobre centenas de quilômetros a média as apaga, e é
+        justamente elas que fazem o lado noturno valer a pena.
+        """
+        melhor = (0, 0, 0)
+        for d in direcoes:
+            c = self.at(d)
+            if c[0] + c[1] + c[2] > melhor[0] + melhor[1] + melhor[2]:
+                melhor = (c[0], c[1], c[2])
+        return melhor
+
+
+def _cores_noturnas(verts, faces, mapa_noite, nuvens=None):
+    """
+    Paleta do lado escuro: o mapa noturno tem as luzes das cidades sobre um
+    fundo quase preto. As nuvens entram como um cinza azulado bem fraco, que é
+    o que a luz da Lua faz por lá.
+    """
+    cores = []
+    reduzido = mapa_noite.reduzido(128, 64)
+    for face in faces:
+        pts = [verts[i] for i in face]
+        n = len(pts)
+        centro = normalize((sum(p[0] for p in pts) / n, sum(p[1] for p in pts) / n,
+                            sum(p[2] for p in pts) / n))
+        amostras = [centro] + [normalize(vec_add(centro, normalize(p))) for p in pts]
+        luz = reduzido.brightest(amostras)
+        # O mapa noturno tem um fundo azulado por cima do preto. Trabalhar com o
+        # brilho médio e cortá-lo mantém oceano e floresta escuros; o que sobra
+        # são as cidades, na cor quente das lâmpadas de sódio.
+        v = max(0.0, (luz[0] + luz[1] + luz[2]) / 3.0 - 9.0) * 5.2
+        cor = [min(255, int(6 + v * 1.05)), min(255, int(7 + v * 0.93)),
+               min(255, int(16 + v * 0.78))]
+        if nuvens is not None:
+            k = clamp((nuvens.at(centro)[0] / 255.0 - 0.3) / 0.7, 0.0, 1.0) * 0.18
+            cor = [int(lerp(c, 42, k)) for c in cor]
+        cores.append(tuple(cor))
+    return cores
+
 
 def _cores_por_mapa(verts, faces, cor_base, mapa, nuvens=None):
     """Uma cor por face: média do mapa no centro e nos vértices, com nuvens por cima."""
@@ -1434,14 +1588,17 @@ def _cores_por_mapa(verts, faces, cor_base, mapa, nuvens=None):
     return cores
 
 
-def build_body_sphere(raio, aneis, setores, cor, mapa=None, nuvens=None):
-    """Esfera de um corpo celeste, colorida pelo mapa quando houver."""
+def build_body_sphere(raio, aneis, setores, cor, mapa=None, nuvens=None, noite=None):
+    """Esfera de um corpo celeste, colorida pelo mapa; com `noite`, duas paletas."""
     verts, faces, _ = build_sphere(raio, rings=aneis, sectors=setores, color=cor, exato=True)
-    return verts, faces, _cores_por_mapa(verts, faces, cor, mapa, nuvens)
+    dia = _cores_por_mapa(verts, faces, cor, mapa, nuvens)
+    if noite is None:
+        return verts, faces, dia
+    return verts, faces, dia, _cores_noturnas(verts, faces, noite, nuvens)
 
 
 def build_horizon_cap(raio, centro, alfa, aneis, setores, cor, mapa=None, nuvens=None,
-                      frente=None, meia_abertura=math.pi, theta_min=0.0):
+                      frente=None, meia_abertura=math.pi, theta_min=0.0, noite=None):
     """
     Calota esférica em torno de `centro` (direção local), até o ângulo `alfa`
     — o horizonte visto de onde a câmera está. Da órbita baixa só 3% da Terra
@@ -1504,7 +1661,10 @@ def build_horizon_cap(raio, centro, alfa, aneis, setores, cor, mapa=None, nuvens
         if n is not None and dot_product(n, pts[0]) < 0.0:
             face = tuple(reversed(face))
         corrigidas.append(face)
-    return verts, corrigidas, _cores_por_mapa(verts, corrigidas, cor, mapa, nuvens)
+    dia = _cores_por_mapa(verts, corrigidas, cor, mapa, nuvens)
+    if noite is None:
+        return verts, corrigidas, dia
+    return verts, corrigidas, dia, _cores_noturnas(verts, corrigidas, noite, nuvens)
 
 
 def build_ring(r_interno, r_externo, setores, faixas, cor, mapa=None):
@@ -1602,6 +1762,135 @@ def build_station_array(sinal):
     b.add_bar((0.0, 0.0, 0.0), (0.0, 0.0, 124.0 * sinal), 7.0, C_PAINEL_BORDA)
     b.add_solar_panel((0.0, 0.0, 62.0 * sinal), 152.0, 116.0, 6, 4,
                       C_PAINEL, C_PAINEL_ALT, C_PAINEL_BORDA)
+    return b.data()
+
+
+# --- Interior da estação: o zoom continua para dentro ---------------------
+INTERIOR_RAIO = 38.0                 # 7,6 m de raio livre dentro do casco
+INTERIOR_X0, INTERIOR_X1 = -96.0, 56.0
+INTERIOR_SETORES = 16
+INTERIOR_SEGMENTOS = 8
+# Janelas: (segmento, setor) que ficam SEM face na casca interna. O casco
+# externo, visto de dentro, é descartado pelo back-face culling — então o buraco
+# mostra o espaço de verdade, sem geometria de vidro e sem custo nenhum.
+INTERIOR_JANELAS = frozenset([(2, 7), (2, 8), (2, 9), (3, 7), (3, 8), (3, 9),   # cúpula (nadir)
+                              (5, 3), (5, 4), (5, 12), (5, 13)])                # escotilhas laterais
+C_INTERIOR = (196, 200, 208)
+C_INTERIOR_ESC = (132, 138, 150)
+C_PISO = (86, 92, 104)
+C_RACK = (152, 158, 172)
+C_LUZ_CABINE = (252, 246, 228)
+
+
+def _face_para_dentro(b, pontos, cor, fora=None):
+    """
+    Face da casca interna: a normal tem de apontar para dentro da cabine. Na
+    parede a referência é a direção radial; nas tampas, o eixo do módulo — o
+    produto escalar com o raio daria zero e deixaria a tampa virada ao contrário.
+    """
+    n = face_normal(pontos)
+    if fora is None:
+        fora = (0.0, sum(p[1] for p in pontos) / len(pontos),
+                sum(p[2] for p in pontos) / len(pontos))
+    if n is not None and dot_product(n, fora) > 0.0:
+        pontos = list(reversed(pontos))
+    b.add_face(pontos, cor)
+
+
+def build_station_interior():
+    """
+    Interior habitável do núcleo Órbita-2, no mesmo referencial local do casco:
+    casca com as normais para dentro, piso em grade, racks nos dois costados,
+    corrimãos, luminárias e as duas escotilhas. O anel de doca fica em +X, então
+    o visor da escotilha de doca olha exatamente para o cargueiro chegando.
+    """
+    b = MeshBuilder()
+    passo_x = (INTERIOR_X1 - INTERIOR_X0) / INTERIOR_SEGMENTOS
+    anel = []
+    for k in range(INTERIOR_SETORES):
+        a = 2.0 * math.pi * k / INTERIOR_SETORES
+        anel.append((INTERIOR_RAIO * math.cos(a), INTERIOR_RAIO * math.sin(a)))
+
+    for s in range(INTERIOR_SEGMENTOS):
+        x0 = INTERIOR_X0 + s * passo_x
+        x1 = x0 + passo_x
+        for k in range(INTERIOR_SETORES):
+            if (s, k) in INTERIOR_JANELAS:
+                continue                       # janela: sem face, o espaço aparece
+            y0, z0 = anel[k]
+            y1, z1 = anel[(k + 1) % INTERIOR_SETORES]
+            # faixa mais clara no teto, mais escura embaixo: dá leitura de "em pé"
+            cor = C_INTERIOR if y0 + y1 > 0.0 else C_INTERIOR_ESC
+            _face_para_dentro(b, [(x0, y0, z0), (x0, y1, z1), (x1, y1, z1), (x1, y0, z0)], cor)
+
+    # tampas dos dois lados, com o vão da escotilha aberto no meio
+    for x, raio_vao in ((INTERIOR_X0, 13.0), (INTERIOR_X1, 15.0)):
+        for k in range(INTERIOR_SETORES):
+            y0, z0 = anel[k]
+            y1, z1 = anel[(k + 1) % INTERIOR_SETORES]
+            f = raio_vao / INTERIOR_RAIO
+            _face_para_dentro(b, [(x, y0, z0), (x, y1, z1), (x, y1 * f, z1 * f),
+                                  (x, y0 * f, z0 * f)], C_INTERIOR_ESC,
+                              fora=(-1.0 if x < 0.0 else 1.0, 0.0, 0.0))
+        # aro da escotilha: anel chapado. Um prisma teria tampa, e a tampa
+        # fecharia justamente o vão por onde se vê a doca e o laboratório.
+        xa = x + (3.0 if x < 0 else -3.0)
+        for k in range(12):
+            a0, a1 = 2.0 * math.pi * k / 12.0, 2.0 * math.pi * (k + 1) / 12.0
+            r0, r1 = raio_vao + 0.5, raio_vao + 4.0
+            b.add_two_sided([(xa, r0 * math.cos(a0), r0 * math.sin(a0)),
+                             (xa, r1 * math.cos(a0), r1 * math.sin(a0)),
+                             (xa, r1 * math.cos(a1), r1 * math.sin(a1)),
+                             (xa, r0 * math.cos(a1), r0 * math.sin(a1))], C_DOCA, C_CASCO_ESC)
+
+    # piso: uma placa só, com as ripas pintadas por cima. Vinte caixas dariam a
+    # mesma imagem por 120 faces, e o corredor é a vista mais cara da cabine.
+    # o piso para antes da cúpula: é pelo vão do deck que se olha para a Terra
+    vao0 = INTERIOR_X0 + 2 * passo_x - 3.0
+    vao1 = INTERIOR_X0 + 4 * passo_x + 3.0
+    for a, z in ((INTERIOR_X0 + 8.0, vao0), (vao1, INTERIOR_X1 - 8.0)):
+        b.add_box((a, -23.0, -24.0), (z, -21.0, 24.0), C_PISO)
+    for s in range(20):
+        x0 = INTERIOR_X0 + 9.0 + s * 6.8
+        if vao0 - 4.4 < x0 < vao1:
+            continue
+        b.add_face([(x0, -20.9, -23.0), (x0, -20.9, 23.0), (x0 + 4.4, -20.9, 23.0),
+                    (x0 + 4.4, -20.9, -23.0)],
+                   C_INTERIOR_ESC if s % 2 else C_CASCO_ESC)
+    for x in (vao0, vao1):                     # guarda-corpo do vão da cúpula
+        b.add_bar((x, -20.0, -22.0), (x, -20.0, 22.0), 2.0, C_DOCA)
+
+    # racks: um armário contínuo por costado, com as portas e telas pintadas
+    for sinal in (1.0, -1.0):
+        z0, z1 = sorted((26.0 * sinal, 36.0 * sinal))
+        b.add_box((INTERIOR_X0 + 12.0, -21.0, z0), (INTERIOR_X1 - 14.0, 9.0, z1),
+                  C_RACK, C_INTERIOR_ESC)
+        frente = z0 - 0.6 if sinal < 0 else z1 + 0.6
+        for s in range(8):
+            x0 = INTERIOR_X0 + 14.0 + s * 17.0
+            cor = C_JANELA if s % 3 == 0 else (C_PAINEL if s % 3 == 1 else C_CASCO_ESC)
+            b.add_two_sided([(x0, -17.0, frente), (x0 + 12.0, -17.0, frente),
+                             (x0 + 12.0, 5.0, frente), (x0, 5.0, frente)], cor)
+
+    # luminárias no teto e corrimãos ao longo do corredor
+    for z in (-11.0, 11.0):
+        b.add_box((INTERIOR_X0 + 10.0, 30.0, z - 2.5), (INTERIOR_X1 - 10.0, 33.0, z + 2.5),
+                  C_LUZ_CABINE, C_LUZ_CABINE)
+    for y, z in ((-4.0, 23.0), (-4.0, -23.0), (14.0, 0.0)):
+        b.add_bar((INTERIOR_X0 + 12.0, y, z), (INTERIOR_X1 - 12.0, y, z), 2.4, C_DOCA)
+
+    # moldura da cúpula, em volta das janelas do nadir
+    x_cupola0 = INTERIOR_X0 + 2 * passo_x
+    x_cupola1 = x_cupola0 + 2 * passo_x
+    for x in (x_cupola0, x_cupola1):
+        b.add_bar((x, -INTERIOR_RAIO + 1.0, -16.0), (x, -INTERIOR_RAIO + 1.0, 16.0), 3.0, C_ANEL)
+    for z in (-16.0, 16.0):
+        b.add_bar((x_cupola0, -INTERIOR_RAIO + 1.0, z), (x_cupola1, -INTERIOR_RAIO + 1.0, z),
+                  3.0, C_ANEL)
+
+    # equipamento solto: uma bolsa de ferramentas e um laptop preso ao rack
+    b.add_box((-52.0, -16.0, 14.0), (-45.0, -10.0, 21.0), C_CARGA_DET, C_CARGA)
+    b.add_box((-8.0, 2.0, 24.0), (6.0, 12.0, 25.5), C_CASCO_ESC, C_JANELA)
     return b.data()
 
 
@@ -2260,7 +2549,7 @@ class CelestialBody:
     """
 
     def __init__(self, nome, tipo, raio_km, cor, pai=None, orbita=None, mapa=None,
-                 nuvens=None, gloss=0.0):
+                 nuvens=None, noite=None, gloss=0.0):
         self.name = nome
         self.kind = tipo
         self.radius_km = raio_km
@@ -2270,6 +2559,7 @@ class CelestialBody:
         self.orbit = orbita
         self.map = ColorMap.load(mapa) if mapa else None
         self.clouds = ColorMap.load(nuvens) if nuvens else None
+        self.night = ColorMap.load(noite) if noite else None
         self.pos_km = (0.0, 0.0, 0.0)
         self.cap = None                    # (centro, alfa) da calota ativa
         tamanho = 3 if tipo in ("estrela", "planeta") else 2
@@ -2293,9 +2583,9 @@ class CelestialBody:
     def _nivel(self, aneis, setores):
         chave = ("corpo", self.name, aneis, setores)
         return lambda: _geometria(chave, lambda: build_body_sphere(
-            self.radius, aneis, setores, self.color, self.map, self.clouds))
+            self.radius, aneis, setores, self.color, self.map, self.clouds, self.night))
 
-    def update_horizon_cap(self, olho, frente=None):
+    def update_horizon_cap(self, olho, frente=None, detalhe=1.0):
         """
         Perto do corpo (menos de três raios), troca a esfera pela calota até o
         horizonte, limitada à janela que a câmera enxerga. Ela só é refeita
@@ -2328,20 +2618,23 @@ class CelestialBody:
                 theta_min = (math.asin(s) - beta) * 0.85 if s < 1.0 else alfa * 0.9
                 meia_h = math.atan(max(VIEW_CENTER_X, WIDTH - VIEW_CENTER_X) / FOV)
                 janela = (f, min(math.pi, 1.5 * meia_h + math.radians(25.0)), max(0.0, theta_min))
+        aneis, setores = max(6, int(14 * detalhe)), max(16, int(40 * detalhe))
         if self.cap is not None:
-            c0, a0, j0 = self.cap
+            c0, a0, j0, d0 = self.cap
             desvio = math.acos(clamp(dot_product(c0, centro), -1.0, 1.0))
             mesma_janela = ((j0 is None) == (janela is None)
                             and (janela is None or dot_product(j0[0], janela[0]) > 0.9945))
-            if desvio < a0 * 0.012 and abs(alfa - a0) < a0 * 0.04 and mesma_janela:
+            if (desvio < a0 * 0.012 and abs(alfa - a0) < a0 * 0.04 and mesma_janela
+                    and d0 == detalhe):
                 return
-        self.cap = (centro, alfa, janela)
+        self.cap = (centro, alfa, janela, detalhe)
         self.mesh.lods = None
         self.mesh._lod_atual = None
         extra = {} if janela is None else {"frente": janela[0], "meia_abertura": janela[1],
                                            "theta_min": janela[2]}
-        self.mesh.set_geometry(*build_horizon_cap(self.radius, centro, alfa, 14, 40, self.color,
-                                                  self.map, self.clouds, **extra))
+        self.mesh.set_geometry(*build_horizon_cap(self.radius, centro, alfa, aneis, setores,
+                                                  self.color, self.map, self.clouds,
+                                                  noite=self.night, **extra))
 
 
 # --- Satélites reais -----------------------------------------------------
@@ -2350,7 +2643,7 @@ SATELLITE_COLORS = {"iss": (255, 255, 255), "tiangong": (255, 236, 200),
                     "gps": (255, 206, 96), "goes": (126, 196, 255)}
 
 
-def satellite_attitude(modelo, radial, velocidade, para_o_sol):
+def satellite_attitude(modelo, radial, velocidade, para_o_sol, alvo_do_telescopio=None):
     """
     Atitude de cada nave, como ela voa de verdade:
     - estações e GOES: LVLH, com a Terra embaixo;
@@ -2370,8 +2663,12 @@ def satellite_attitude(modelo, radial, velocidade, para_o_sol):
         z = normalize(cross_product(x, para_o_sol))
         return (x, cross_product(z, x), z)
     if modelo == "jwst":
+        # o escudo solar fica sempre de frente para o Sol; sobra um grau de
+        # liberdade, usado para chegar o mais perto possível do alvo da agenda
         z = para_o_sol
-        x = normalize(cross_product(ECLIPTIC_NORTH, z))
+        alvo = alvo_do_telescopio or ECLIPTIC_NORTH
+        x = vec_sub(alvo, vec_scale(z, dot_product(alvo, z)))
+        x = normalize(x) if length(x) > 0.05 else normalize(cross_product(ECLIPTIC_NORTH, z))
         return (x, cross_product(z, x), z)
     return lvlh_basis(radial, velocidade)
 
@@ -2437,6 +2734,7 @@ class RealSatellite:
         self.geo_km = (0.0, 0.0, 0.0)
         self.pos_km = (0.0, 0.0, 0.0)
         self.incidence = 0.0
+        self.aim = None                 # direção do alvo real, quando conhecida
 
     @property
     def meshes(self):
@@ -2460,7 +2758,7 @@ class RealSatellite:
         else:
             velocidade = (1.0, 0.0, 0.0)
         base = satellite_attitude(self.model, ef.direcao_para_mundo(geo_km), velocidade,
-                                  para_o_sol)
+                                  para_o_sol, self.aim)
         self.body.update(basis=base)
         soma = 0.0
         for p in self.panels:
@@ -2516,6 +2814,8 @@ class Scene:
         self.door_hi = PolyMesh(*build_door_leaf(False), name="Comporta superior")
         self.door_lo = PolyMesh(*build_door_leaf(True), name="Comporta inferior")
         self.cargo = PolyMesh(*build_cargo_ship(), name="Cargueiro Vega-7")
+        self.interior = PolyMesh(*build_station_interior(), position=STATION_ORIGIN,
+                                 name="Cabine do Núcleo", gloss=0.10, ambiente=0.52)
         self.station_arrays = [
             ArticulatedPanel(PolyMesh(*build_station_array(1.0 if z > 0 else -1.0),
                                       name="Painel solar Órbita-2", gloss=0.12),
@@ -2548,7 +2848,8 @@ class Scene:
 
         self.meshes = ([b.mesh for b in self.bodies.values()] + self.rings_meshes()
                        + [m for s in self.satellites for m in s.meshes] + self.debris
-                       + [self.station] + [p.mesh for p in self.station_arrays]
+                       + [self.station, self.interior]
+                       + [p.mesh for p in self.station_arrays]
                        + [self.lab, self.door_hi, self.door_lo]
                        + [m for r in self.robots for m in r.meshes]
                        + [self.cargo])
@@ -2569,6 +2870,12 @@ class Scene:
         self.wall_time = 0.0           # relógio das animações locais (detritos)
         self.zoom_index = DEFAULT_ZOOM
         self.focus_index = None
+        self.presentation = None
+        self._eclipse_cache = None
+        self._track_cache = None
+        self._pass_cache = None
+        self._foco_cache = None
+        self.telescope_eye = None       # nave no modo "olho do telescópio"
         self.station_pos = STATION_ORIGIN
         self.station_basis = IDENTIDADE
         self.station_km = (0.0, 0.0, 0.0)
@@ -2584,6 +2891,7 @@ class Scene:
         for nome, raio, cor, mapa in catalogo.PLANETAS:
             bodies[nome] = CelestialBody(nome, "planeta", raio, cor, mapa=mapa,
                                          nuvens="nuvens" if nome == "Terra" else None,
+                                         noite="noite" if nome == "Terra" else None,
                                          gloss=0.06 if nome == "Terra" else 0.0)
         nome, raio, cor, mapa = catalogo.LUA
         bodies[nome] = CelestialBody(nome, "lua", raio, cor, pai=bodies["Terra"], mapa=mapa)
@@ -2662,6 +2970,7 @@ class Scene:
         """Elementos novos do CelesTrak (baixados em segundo plano) substituem o snapshot."""
         antigos = set(id(m) for s in self.satellites for m in s.meshes)
         self._build_satellites(grupos, gerado_em)
+        self._foco_cache = None
         novos = [m for s in self.satellites for m in s.meshes]
         self.meshes = [m for m in self.meshes if id(m) not in antigos]
         indice = len(self.bodies) + len(self.rings)
@@ -2743,16 +3052,22 @@ class Scene:
         return self.zoom_level
 
     def focus_targets(self):
-        """nome -> (malha, raio em unidades) dos corpos e naves que a tecla P visita."""
-        alvos = {nome: (corpo.mesh, corpo.radius) for nome, corpo in self.bodies.items()}
-        for s in self.satellites:
-            if s.model != "gps":
-                alvos[s.name] = (s.body, max(s.body.bounding_radius, 40.0))
-        return alvos
+        """
+        nome -> (malha, raio em unidades) dos corpos e naves que a tecla P
+        visita. Fica em cache: a lista só muda quando os satélites são
+        recriados, e remontá-la era chamado dezenas de vezes por quadro.
+        """
+        if self._foco_cache is None:
+            alvos = {nome: (corpo.mesh, corpo.radius) for nome, corpo in self.bodies.items()}
+            for s in self.satellites:
+                if s.model != "gps":
+                    alvos[s.name] = (s.body, max(s.body.bounding_radius, 40.0))
+            self._foco_cache = (alvos, [n for n in catalogo.ORDEM_FOCO if n in alvos])
+        return self._foco_cache[0]
 
     def focus_names(self):
-        alvos = self.focus_targets()
-        return [n for n in catalogo.ORDEM_FOCO if n in alvos]
+        self.focus_targets()
+        return self._foco_cache[1]
 
     @property
     def focus_name(self):
@@ -2772,6 +3087,316 @@ class Scene:
             self.focus_index = (self.focus_index + passo) % len(nomes)
         return nomes[self.focus_index]
 
+    # -- modo apresentação (F9) ---------------------------------------------
+    def toggle_presentation(self):
+        """
+        Liga e desliga o roteiro automático. Ele só mexe em enquadramento,
+        câmera e relógio — tudo o que um dedo faria no teclado —, então sair no
+        meio deixa a cena num estado consistente.
+        """
+        if self.presentation is not None:
+            self.presentation = None
+            return False
+        self.presentation = [0, 0.0]
+        self._apply_presentation_step()
+        return True
+
+    @property
+    def presentation_caption(self):
+        if self.presentation is None:
+            return None
+        passo = PRESENTATION_SCRIPT[self.presentation[0]]
+        return passo["legenda"], self.presentation[0] + 1, len(PRESENTATION_SCRIPT)
+
+    def _apply_presentation_step(self):
+        passo = PRESENTATION_SCRIPT[self.presentation[0]]
+        self.focus_index = None
+        for i, nivel in enumerate(ZOOM_LEVELS):
+            if nivel["name"].startswith(passo["zoom"]):
+                self.zoom_index = i
+                break
+        self.camera.go_to(passo["camera"])
+        acao = passo.get("acao")
+        if acao == "parar":
+            self.state = STATE_PARADO
+            self.sim_time = 0.0
+        elif acao == "iniciar":
+            self.goto_phase(1)
+        elif acao == "fase4":
+            self.goto_phase(4)
+        elif acao == "acelerar":
+            self.time_scale_index = 2               # 1 h/s: uma volta em 1,5 s
+        elif acao == "tempo real":
+            self.time_scale_index = DEFAULT_TIME_SCALE
+
+    def _update_presentation(self, dt):
+        if self.presentation is None:
+            return
+        self.presentation[1] += dt
+        if self.presentation[1] < PRESENTATION_SCRIPT[self.presentation[0]]["t"]:
+            return
+        self.presentation[0] += 1
+        self.presentation[1] = 0.0
+        if self.presentation[0] >= len(PRESENTATION_SCRIPT):
+            self.presentation = None
+            self.time_scale_index = DEFAULT_TIME_SCALE
+            return
+        self._apply_presentation_step()
+
+    # -- cometas, pontos de Lagrange e eclipses --------------------------------
+    def comet_tails(self):
+        """
+        Cauda de cada cometa dentro de 4 UA: aponta na direção oposta ao Sol e
+        cresce quando o cometa se aproxima (a sublimação vai com 1/r²). Devolve
+        (posição, direção, comprimento em unidades, cor).
+        """
+        saida = []
+        for corpo in self.bodies.values():
+            if corpo.kind != "cometa":
+                continue
+            r = length(corpo.pos_km) / ef.UA_KM
+            if r > 4.0:
+                continue
+            comprimento = clamp(0.35 / (r * r), 0.02, 0.9) * ef.UA_KM * KM
+            direcao = normalize(ef.direcao_para_mundo(corpo.pos_km))
+            saida.append((corpo.mesh.pos, direcao, comprimento, corpo.color))
+        return saida
+
+    def lagrange_points(self):
+        """
+        L4 e L5 de Júpiter: 60° à frente e atrás, na mesma órbita. É onde os
+        troianos do catálogo se acumulam, e nomear os dois enxames explica na
+        hora por que há duas nuvens paradas ao lado do planeta.
+        """
+        jupiter = self.bodies.get("Júpiter")
+        if jupiter is None:
+            return []
+        saida = []
+        for nome, sinal in (("Troianos L4", 1.0), ("Troianos L5", -1.0)):
+            pos = rotate_xyz(ef.para_mundo(jupiter.pos_km), (0.0, -60.0 * sinal, 0.0))
+            saida.append((nome, pos))
+        return saida
+
+    def next_eclipse(self):
+        """
+        Próximo eclipse lunar ou solar, em dois estágios: uma varredura de seis
+        em seis horas procura os alinhamentos (as luas novas e cheias), e cada
+        candidato é refinado de dez em dez minutos. Uma varredura de um estágio
+        não serve: a janela de um eclipse dura poucas horas e o passo grosso
+        passa por cima dela. O resultado vale por dias e fica em cache.
+        """
+        jd = self.jd
+        if self._eclipse_cache is not None and self._eclipse_cache[0] > jd:
+            return self._eclipse_cache
+        achado = None
+        anterior = self._separacao_sol_lua(jd)
+        atual = self._separacao_sol_lua(jd + 0.25)
+        for passo in range(1, 2920):                   # dois anos, de 6 em 6 horas
+            momento = jd + passo * 0.25
+            seguinte = self._separacao_sol_lua(momento + 0.25)
+            # mínimo local da separação (lua nova) ou da anti-separação (cheia)
+            for indice, limite in ((0, 1.45), (1, 1.05)):
+                if atual[indice] <= anterior[indice] and atual[indice] <= seguinte[indice]:
+                    fundo = self._refinar_alinhamento(momento, indice)
+                    if fundo is not None and fundo[1] < limite:
+                        achado = (fundo[0], "solar" if indice == 0 else "lunar")
+                        break
+            if achado is not None:
+                break
+            anterior, atual = atual, seguinte
+        self._eclipse_cache = achado
+        return achado
+
+    def _refinar_alinhamento(self, momento, indice):
+        """Mínimo da separação em torno de `momento`, de dez em dez minutos."""
+        passo = 10.0 / 1440.0
+        melhor = None
+        k = -36
+        while k <= 36:                                  # seis horas para cada lado
+            t = momento + k * passo
+            valor = self._separacao_sol_lua(t)[indice]
+            if melhor is None or valor < melhor[1]:
+                melhor = (t, valor)
+            k += 1
+        return melhor
+
+    @staticmethod
+    def _separacao_sol_lua(jd):
+        """
+        (separação, anti-separação) em graus entre a Lua e o Sol, vistos da
+        Terra. A primeira vai a zero na lua nova (eclipse solar), a segunda na
+        lua cheia (eclipse lunar).
+        """
+        terra = ef.posicao_terra(jd)
+        lua = ef.posicao_lua_geocentrica(jd)
+        para_o_sol = normalize(vec_scale(terra, -1.0))
+        direcao_lua = normalize(lua)
+        angulo = math.degrees(math.acos(clamp(dot_product(direcao_lua, para_o_sol), -1.0, 1.0)))
+        return (angulo, 180.0 - angulo)
+    def ground_track(self, raio):
+        """
+        Projeção da órbita da estação sobre a superfície, no referencial do
+        planeta. A forma muda devagar — a estação leva 92 minutos para dar a
+        volta —, então o traçado fica em cache e só é refeito quando o relógio
+        avança meio minuto de tempo simulado. Refazer a cada quadro custava
+        6 ms em 73 rotações da Terra.
+        """
+        terra = self.bodies["Terra"]
+        base = terra.mesh.basis
+        if base is None:
+            return []
+        jd = self.jd
+        if self._track_cache is not None:
+            jd0, raio0, locais = self._track_cache
+            if abs(jd - jd0) < 30.0 / ef.SEGUNDOS_DIA and raio0 == raio:
+                return [vec_add(terra.mesh.pos, vec_scale(mat_apply(base, d), raio))
+                        for d in locais]
+        periodo = self.station_orbit.periodo_min / 1440.0
+        locais = []
+        for k in range(73):
+            momento = jd + periodo * (k / 72.0 - 0.5)
+            geo = ef.direcao_para_mundo(self.station_orbit.posicao(momento))
+            locais.append(normalize(mat_apply_t(ef.base_rotacao("Terra", momento), geo)))
+        self._track_cache = (jd, raio, locais)
+        pontos = []
+        # a Terra gira por baixo: o ponto vai ao referencial do planeta na época
+        # dele e volta com a orientação de agora
+        for local in locais:
+            pontos.append(vec_add(terra.mesh.pos, vec_scale(mat_apply(base, local), raio)))
+        return pontos
+
+    def terminator(self, raio):
+        """Círculo dia/noite: o grande círculo perpendicular à direção do Sol."""
+        terra = self.bodies["Terra"]
+        para_o_sol = normalize(ef.direcao_para_mundo(vec_scale(terra.pos_km, -1.0)))
+        u = normalize(cross_product(para_o_sol, (0.0, 1.0, 0.0)))
+        if length(u) < 0.5:
+            u = normalize(cross_product(para_o_sol, (1.0, 0.0, 0.0)))
+        w = cross_product(para_o_sol, u)
+        pontos = []
+        for k in range(73):
+            a = 2.0 * math.pi * k / 72.0
+            d = (u[0] * math.cos(a) + w[0] * math.sin(a),
+                 u[1] * math.cos(a) + w[1] * math.sin(a),
+                 u[2] * math.cos(a) + w[2] * math.sin(a))
+            pontos.append(vec_add(terra.mesh.pos, vec_scale(d, raio)))
+        return pontos
+
+    # -- olho do telescópio e passagem da ISS ---------------------------------
+    def cycle_telescope_eye(self):
+        """Tecla K: senta a câmera atrás do espelho do James Webb, depois do Hubble."""
+        naves = [s.name for s in self.satellites if s.model in ("jwst", "hubble")]
+        if not naves:
+            return None
+        if self.telescope_eye is None:
+            self.telescope_eye = naves[0]
+        else:
+            i = naves.index(self.telescope_eye) + 1 if self.telescope_eye in naves else len(naves)
+            self.telescope_eye = naves[i] if i < len(naves) else None
+        if self.telescope_eye is not None:
+            self.focus_index = None
+        return self.telescope_eye
+
+    def aim_webb(self, direcao):
+        """Direção do alvo que a agenda do STScI diz que o Webb observa agora."""
+        for s in self.satellites:
+            if s.model == "jwst":
+                s.aim = direcao
+
+    def next_iss_pass(self, horas=48.0):
+        """
+        Próxima passagem visível da ISS sobre o observador em solo: varre o
+        intervalo em passos de 30 s procurando o horizonte e refina o máximo.
+        Devolve (jd do máximo, elevação em graus) ou None.
+        """
+        iss = next((s for s in self.satellites if s.model == "iss"), None)
+        if iss is None or iss.orbit is None:
+            return None
+        jd = self.jd
+        if self._pass_cache is not None and self._pass_cache[0] > jd:
+            return self._pass_cache
+        nome, lat, lon, alt = LOCAL_OBSERVADOR
+        passo = 30.0 / ef.SEGUNDOS_DIA
+        melhor = None
+        momento = jd
+        while momento < jd + horas / 24.0:
+            elev = ef.elevacao_topocentrica(iss.orbit.posicao(momento), lat, lon, alt, momento)
+            if elev > 10.0:
+                # achou uma passagem: segue até o máximo
+                topo = (momento, elev)
+                while True:
+                    momento += passo
+                    elev = ef.elevacao_topocentrica(iss.orbit.posicao(momento), lat, lon, alt,
+                                                    momento)
+                    if elev <= topo[1]:
+                        break
+                    topo = (momento, elev)
+                melhor = topo
+                break
+            momento += passo
+        self._pass_cache = melhor
+        return melhor
+
+    def focus_data(self):
+        """
+        Ficha do corpo em foco: o que é, tamanho, massa, gravidade, rotação e
+        onde ele está agora. Distâncias e velocidade saem das efemérides do
+        próprio quadro — a velocidade por diferença finita de meio minuto.
+        """
+        nome = self.focus_name
+        if nome is None:
+            return None
+        jd = self.jd
+        terra = self.bodies["Terra"].pos_km
+        corpo = self.bodies.get(nome)
+        if corpo is not None:
+            pos, raio, tipo = corpo.pos_km, corpo.radius_km, corpo.kind
+            pai = corpo.parent.name if corpo.parent is not None else "Sol"
+            if corpo.orbit is not None:
+                antes = corpo.orbit.posicao(jd - 30.0 / ef.SEGUNDOS_DIA)
+                depois = corpo.orbit.posicao(jd + 30.0 / ef.SEGUNDOS_DIA)
+            elif nome == "Lua":
+                antes = ef.posicao_lua_geocentrica(jd - 30.0 / ef.SEGUNDOS_DIA)
+                depois = ef.posicao_lua_geocentrica(jd + 30.0 / ef.SEGUNDOS_DIA)
+            elif tipo == "planeta":
+                antes = ef.posicao_planeta(nome, jd - 30.0 / ef.SEGUNDOS_DIA)
+                depois = ef.posicao_planeta(nome, jd + 30.0 / ef.SEGUNDOS_DIA)
+            else:
+                antes = depois = pos
+        else:
+            nave = next((s for s in self.satellites if s.name == nome), None)
+            if nave is None:
+                return None
+            pos, raio, tipo, pai = nave.pos_km, nave.body.bounding_radius / KM, "nave", "Terra"
+            if nave.orbit is not None:
+                antes = vec_add(terra, nave.orbit.posicao(jd - 30.0 / ef.SEGUNDOS_DIA))
+                depois = vec_add(terra, nave.orbit.posicao(jd + 30.0 / ef.SEGUNDOS_DIA))
+            else:
+                antes = depois = pos
+        velocidade = length(vec_sub(depois, antes)) / 60.0
+        massa, gravidade, rotacao = catalogo.FISICA.get(nome, (None, None, None))
+        linhas = [("%s (%s)" % (nome, tipo), True)]
+        if raio >= 1.0:
+            linhas.append(("raio .............. %s km" % _milhar(raio), False))
+        else:
+            linhas.append(("raio .............. %.0f m" % (raio * 1000.0), False))
+        if massa:
+            linhas.append(("massa ............. %.3g kg" % massa, False))
+            linhas.append(("gravidade ......... %.2f m/s²" % gravidade, False))
+            sentido = "retrógrada" if rotacao < 0 else "direta"
+            linhas.append(("rotação ........... %.2f h (%s)" % (abs(rotacao), sentido), False))
+        linhas.append(("orbita ............ %s" % pai, False))
+        linhas.append(("distância ao Sol .. %.4f UA" % (length(pos) / ef.UA_KM), False))
+        d_terra = length(vec_sub(pos, terra))
+        if d_terra < 1.0e6:
+            linhas.append(("distância à Terra . %s km" % _milhar(d_terra), False))
+        else:
+            linhas.append(("distância à Terra . %.4f UA" % (d_terra / ef.UA_KM), False))
+        linhas.append(("velocidade ........ %.2f km/s" % velocidade, False))
+        luz = d_terra / 299792.458
+        linhas.append(("luz daqui ......... %s" % _tempo_de_luz(luz), False))
+        return linhas
+
     def anchor_position(self, nome):
         """Ponto que a câmera acompanha em cada nível de zoom."""
         if nome == "earth":
@@ -2781,21 +3406,32 @@ class Scene:
         return self.station_pos
 
     def _camera_anchor(self):
-        """(posição, zoom, fonte, base, orbital) da âncora atual da câmera."""
+        """(posição, zoom, fonte, base, tabela de enquadramentos) da âncora atual."""
+        if self.telescope_eye is not None:
+            nave = next((s for s in self.satellites if s.name == self.telescope_eye), None)
+            if nave is not None and nave.body.basis is not None:
+                return (nave.body.pos, 1.0, "ocular:" + nave.name, nave.body.basis,
+                        OCULAR_PRESETS)
         foco = self.focus_name
         if foco is not None:
             malha, raio = self.focus_targets()[foco]
             return (malha.pos, max(raio * 6.5, 120.0) / PRESET_DISTANCE, "foco:" + foco,
-                    IDENTIDADE, True)
+                    IDENTIDADE, ORBITAL_PRESETS)
         nivel = self.zoom_level
+        if nivel.get("interior"):
+            # dentro da cabine o olho e o alvo são pontos do próprio módulo
+            return self.station_pos, 1.0, "interior", self.station_basis, INTERIOR_PRESETS
         if nivel["anchor"] == "station":
-            return self.station_pos, nivel["scale"], "station", self.station_basis, False
+            return (self.station_pos, nivel["scale"], "station", self.station_basis,
+                    CAMERA_PRESETS)
         return (self.anchor_position(nivel["anchor"]), nivel["scale"], nivel["anchor"],
-                IDENTIDADE, True)
+                IDENTIDADE, ORBITAL_PRESETS)
 
     def _aim_camera(self):
-        pos, zoom, fonte, base, orbital = self._camera_anchor()
-        self.camera.usar_presets_orbitais(orbital)
+        pos, zoom, fonte, base, tabela = self._camera_anchor()
+        dentro = tabela in (INTERIOR_PRESETS, OCULAR_PRESETS)
+        definir_near(2.0 if dentro else 8.0)
+        self.camera.usar_tabela(tabela)
         self.camera.set_anchor(pos, zoom, fonte=fonte, basis=base)
         perto_da_terra = length(vec_sub(self.camera.eye, self.earth.pos)) < 30.0 * self.bodies["Terra"].radius
         self.camera.fill_dir = (normalize(vec_sub(self.earth.pos, self.camera.eye))
@@ -2906,6 +3542,10 @@ class Scene:
                  for nome, corpo in self.bodies.items()]
         saida += [(s.name, s.body, 1 if s.model != "gps" else 4) for s in self.satellites]
         return saida
+
+    def cloud_labels(self):
+        """Rótulos sem malha: os enxames de troianos nos pontos de Lagrange."""
+        return self.lagrange_points()
 
     def shadow_factor(self, ponto_km):
         """Quanto o ponto (km, heliocêntrico) está eclipsado pela Terra, de 0 a 1."""
@@ -3044,6 +3684,7 @@ class Scene:
                     self.camera.follow(self.cargo)
                 else:
                     self.camera.go_to(chave)
+        self._update_presentation(dt)
         self._aim_camera()
         if antes < DOCKING_LATCH_TIME <= self.sim_time:
             self._emit_docking_sparks()
@@ -3057,9 +3698,30 @@ class Scene:
         else:
             self.camera.shake = (0.0, 0.0, 0.0)
         self.camera.update(dt)
-        self.bodies["Terra"].update_horizon_cap(self.camera.eye, self.camera.forward)
+        dentro = self._visibilidade_da_cabine()
+        # de dentro a Terra aparece só pelas janelas, mas na cúpula ela toma a
+        # tela inteira: 85% da resolução mantém o limbo liso e ainda economiza
+        self.bodies["Terra"].update_horizon_cap(self.camera.eye, self.camera.forward,
+                                                0.7 if dentro else 1.0)
         self._update_clouds()
         self.sight = self.line_of_sight()
+
+    def _visibilidade_da_cabine(self):
+        """
+        Dentro do módulo, o casco externo só daria trabalho: todas as faces dele
+        estão de costas para a câmera. Escondê-lo devolve mil faces por quadro, e
+        a cabine só é desenhada quando a câmera está perto o bastante para vê-la
+        por uma janela.
+        """
+        local = mat_apply_t(self.station_basis, vec_sub(self.camera.eye, self.station_pos))
+        raio = math.hypot(local[1], local[2])
+        dentro = (INTERIOR_X0 - 4.0 < local[0] < INTERIOR_X1 + 4.0
+                  and raio < INTERIOR_RAIO + 4.0)
+        self.station.visible = not dentro
+        # de fora, todas as faces da cabine estão de costas: desenhá-la seria
+        # transformar mil vértices por quadro para descartar tudo
+        self.interior.visible = dentro
+        return dentro
 
     def _update_clouds(self):
         """Avança as nuvens visíveis por lotes; o tamanho do lote cresce com a escala de tempo."""
@@ -3088,6 +3750,9 @@ class Scene:
         sombra = self.shadow_factor(self.station_km)
         for painel in self.station_arrays:
             painel.place(self.station_pos, base, para_o_sol, sombra)
+        # a cabine é iluminada pelas luminárias do teto, presas ao próprio módulo
+        self.interior.update(pos=self.station_pos, basis=base)
+        self.interior.luz_local = normalize(mat_apply(base, (0.12, 1.0, 0.0)))
 
         self._animate_door(t)
         self._animate_cargo(t, emitir)
@@ -3142,6 +3807,7 @@ class Scene:
     def _place_satellites(self, jd, detalhe_total):
         terra = self.bodies["Terra"]
         olho = self.camera.eye if hasattr(self, "camera") else None
+        acompanhadas = (self.telescope_eye, self.focus_name)   # uma vez, não por nave
         for s in self.satellites:
             if s.orbit is not None:
                 geo = s.orbit.posicao(jd)
@@ -3149,7 +3815,9 @@ class Scene:
                 geo = self.jwst_table.posicao(jd) if self.jwst_table is not None else None
                 if geo is None:
                     geo = ef.posicao_l2_aproximada(terra.pos_km)
-            detalhe = detalhe_total
+            # a nave que a câmera acompanha ou olha por dentro precisa de
+            # atitude mesmo estando a um pixel de distância
+            detalhe = detalhe_total or s.name in acompanhadas
             if not detalhe and olho is not None:
                 pos = vec_add(terra.mesh.pos, vec_scale(ef.direcao_para_mundo(geo), KM))
                 detalhe = s.body.bounding_radius * FOV > 0.6 * length(vec_sub(olho, pos))
@@ -3474,6 +4142,8 @@ class Renderer:
         if self.show_orbits:
             self._draw_orbits(surface, scene, cam)
         self._draw_clouds(surface, scene, cam)
+        self._draw_comet_tails(surface, scene, cam)
+        self._draw_ground_track(surface, scene, cam)
 
         itens = []
         descartadas = 0
@@ -3524,7 +4194,9 @@ class Renderer:
             else:
                 itens.append((v[2], 1, tela, (cor, raio)))
             if p["life"] > 0.78:
-                itens.append((v[2] + 0.5, 2, tela, (cor, raio * 4)))
+                # o halo tem teto: de dentro da cabine, com o plano próximo a 40 cm,
+                # uma faísca a poucos metros pedia um brilho do tamanho da tela
+                itens.append((v[2] + 0.5, 2, tela, (cor, min(raio * 4, 110))))
 
         for k, local in enumerate(scene.beacons.local):
             v = cam.to_view(scene.to_world(local))
@@ -3580,8 +4252,8 @@ class Renderer:
         # a intensidade entra na chave do cache de halos: em 8 degraus, a janela
         # de 0,7 s reaproveita sprites em vez de criar um por quadro
         degrau = math.ceil(pulso * 8.0) / 8.0
-        self.glow.blit(surface, project_view(v), int(150.0 * FOV / v[2]), (255, 226, 170),
-                       intensidade=0.9 * degrau, queda=1.8)
+        self.glow.blit(surface, project_view(v), min(int(150.0 * FOV / v[2]), 420),
+                       (255, 226, 170), intensidade=0.9 * degrau, queda=1.8)
 
     def _draw_stars(self, surface, scene, cam):
         """
@@ -3627,7 +4299,7 @@ class Renderer:
     def _draw_atmosphere(self, surface, scene, cam):
         """
         Atmosfera da Terra e coroa do Sol, desenhadas antes das malhas. O brilho
-        do Sol só aparece se a linha de visão até ele não atravessa a Terra — o
+        do Sol só aparece se a linha 'de visão até ele não atravessa a Terra — o
         mesmo teste raio-esfera do sensor, agora como iluminação binária.
         """
         terra = scene.earth
@@ -3693,6 +4365,67 @@ class Renderer:
                 x = (dx * rx + dy * ry + dz * rz) * foco / vz + cx0
                 y = -(dx * ux + dy * uy + dz * uz) * foco / vz + cy0
                 if abs(x) > 1e5 or abs(y) > 1e5:        # quase no plano do olho
+                    if len(trecho) > 1:
+                        pygame.draw.lines(surface, cor, False, trecho)
+                    trecho = []
+                    continue
+                trecho.append((int(x), int(y)))
+            if len(trecho) > 1:
+                pygame.draw.lines(surface, cor, False, trecho)
+
+    def _draw_comet_tails(self, surface, scene, cam):
+        """Cauda anti-solar dos cometas, mais longa quanto mais perto do Sol."""
+        for pos, direcao, comprimento, cor in scene.comet_tails():
+            a = project_point(pos, cam)
+            b = project_point(vec_add(pos, vec_scale(direcao, comprimento)), cam)
+            if a is None or b is None:
+                continue
+            if max(abs(a[0]), abs(a[1]), abs(b[0]), abs(b[1])) > 20000:
+                continue
+            if abs(b[0] - a[0]) + abs(b[1] - a[1]) < 3:
+                continue
+            # duas passadas: um fio claro no eixo e um halo largo esmaecido
+            pygame.draw.line(surface, tuple(c // 3 for c in cor), a, b, 3)
+            pygame.draw.line(surface, cor, a, b, 1)
+
+    def _draw_ground_track(self, surface, scene, cam):
+        """
+        Rastro no solo da estação e o terminador, desenhados sobre o globo. Só
+        aparecem quando a Terra está grande o bastante para eles fazerem sentido.
+        """
+        terra = scene.earth
+        v = cam.to_view(terra.pos)
+        if v[2] < NEAR:
+            return
+        raio_px = terra.bounding_radius * FOV / v[2]
+        if not 60.0 < raio_px < WIDTH * 2.5:
+            return
+        raio = terra.bounding_radius * 1.004          # rente à superfície
+        ex, ey, ez = cam.eye
+        rx, ry, rz = cam.right
+        ux, uy, uz = cam.up
+        fx, fy, fz = cam.forward
+        cx0, cy0, foco = VIEW_CENTER_X, VIEW_CENTER_Y, FOV
+        # vetor do centro do planeta até o olho: separa o hemisfério visível
+        vx, vy, vz = vec_sub(cam.eye, terra.pos)
+        px0, py0, pz0 = terra.pos
+        for pontos, cor in ((scene.ground_track(raio), (86, 226, 198)),
+                            (scene.terminator(raio), (255, 190, 120))):
+            trecho = []
+            # projeção desenrolada: são 146 pontos por quadro, e a chamada de
+            # função por ponto custava mais que a própria conta
+            for wx, wy, wz in pontos:
+                dx, dy, dz = wx - ex, wy - ey, wz - ez
+                if (wx - px0) * vx + (wy - py0) * vy + (wz - pz0) * vz < 0.0:
+                    corte = True                     # do outro lado do planeta
+                else:
+                    pz = dx * fx + dy * fy + dz * fz
+                    corte = pz < NEAR
+                if not corte:
+                    x = (dx * rx + dy * ry + dz * rz) * foco / pz + cx0
+                    y = -(dx * ux + dy * uy + dz * uz) * foco / pz + cy0
+                    corte = abs(x) > 20000 or abs(y) > 20000
+                if corte:
                     if len(trecho) > 1:
                         pygame.draw.lines(surface, cor, False, trecho)
                     trecho = []
@@ -3819,32 +4552,78 @@ HUD_ACCENT = (86, 226, 198)
 HUD_WARN = (255, 202, 84)
 
 
+def _milhar(valor):
+    """12345.6 -> '12 346' (separador fino, que o Consolas desenha bem)."""
+    return "{:,.0f}".format(valor).replace(",", " ")
+
+
+def _tempo_de_luz(segundos):
+    if segundos < 60.0:
+        return "%.1f s" % segundos
+    if segundos < 3600.0:
+        return "%.1f min" % (segundos / 60.0)
+    return "%.2f h" % (segundos / 3600.0)
+
 def _cortar(texto, limite):
     return texto if len(texto) <= limite else texto[:limite - 1] + "…"
 
 
 class Hud:
-    """Interface sobreposta: título, estado, tempo, progresso, telescópios e comandos."""
+    """
+    Interface sobreposta: título, estado, tempo, progresso, telescópios e comandos.
 
-    FOOTER_HEIGHT = 86
+    O layout é escrito em unidades de projeto — a janela de referência de
+    1080x720 — e multiplicado por `escala` na hora de desenhar. Em tela cheia
+    numa tela 4K o painel cresce junto com a janela, em vez de virar um selo no
+    canto; a fonte é rasterizada no tamanho final, então continua nítida.
+    """
+
+    FOOTER_HEIGHT = 86               # unidades de projeto
+    ESCALA_MAXIMA = 2.4
 
     def __init__(self):
-        self.font = pygame.font.SysFont("Consolas", 14)
-        self.font_small = pygame.font.SysFont("Consolas", 12)
-        self.font_bold = pygame.font.SysFont("Consolas", 15, bold=True)
-        self.font_title = pygame.font.SysFont("Consolas", 19, bold=True)
+        self.escala = 0.0
+        self._texto_cache = {}
+        self._camadas = {}
+        self._aplicar_escala(1.0)
         self.show_credits = False
+        self.show_help = False
+        self.show_requisitos = False
         self.show_debug = False
         self.show_labels = False
         self.rotulos_desenhados = 0
         self._aviso = ""
-        self._aviso_restante = 0          # quadros que o aviso ainda fica na tela
-        self._texto_cache = {}
-        self._camadas = {}
+        self._aviso_restante = 0      # quadros que o aviso ainda fica na tela
         self._fase_vista = None
         self._flash = 0.0
         self._agenda_segundo = None
         self._agenda_atual = (None, "")
+
+    # -- escala e primitivas -------------------------------------------------
+    def _aplicar_escala(self, escala):
+        """Refaz as fontes quando a janela muda de tamanho; os caches vão junto."""
+        if abs(escala - self.escala) < 1e-3:
+            return
+        self.escala = escala
+
+        def fonte(tamanho, negrito=False):
+            return pygame.font.SysFont("Consolas", max(9, int(round(tamanho * escala))),
+                                       bold=negrito)
+
+        self.font = fonte(14)
+        self.font_small = fonte(12)
+        self.font_bold = fonte(15, True)
+        self.font_title = fonte(19, True)
+        self._texto_cache.clear()
+        self._camadas.clear()
+
+    def e(self, valor):
+        """Unidade de projeto -> pixels da janela atual."""
+        return int(valor * self.escala)
+
+    @property
+    def rodape(self):
+        return self.e(self.FOOTER_HEIGHT)
 
     def txt(self, fonte, texto, antialias, cor):
         """
@@ -3861,6 +4640,10 @@ class Hud:
             pronto = fonte.render(texto, antialias, cor)
             self._texto_cache[chave] = pronto
         return pronto
+
+    def _escrever(self, surface, fonte, texto, cor, x, y):
+        """Escreve numa posição dada em unidades de projeto."""
+        surface.blit(self.txt(fonte, texto, True, cor), (self.e(x), self.e(y)))
 
     def _camada(self, largura, altura, cor, alpha):
         """
@@ -3879,22 +4662,33 @@ class Hud:
         camada.set_alpha(alpha)
         return camada
 
-    def _panel(self, surface, rect, alpha=205):
+    def _panel_px(self, surface, rect, alpha=205):
         surface.blit(self._camada(rect[2], rect[3], HUD_BG, alpha), (rect[0], rect[1]))
-        pygame.draw.rect(surface, (46, 58, 76), rect, 1, border_radius=4)
+        pygame.draw.rect(surface, (46, 58, 76), rect, 1, border_radius=self.e(4))
 
+    def _panel(self, surface, rect, alpha=205):
+        self._panel_px(surface, tuple(self.e(v) for v in rect), alpha)
+
+    # -- quadro ---------------------------------------------------------------
     def draw(self, surface, scene, renderer, desempenho=None):
         """`desempenho` é (FPS medido, ms de CPU por quadro), publicado pela App."""
+        self._aplicar_escala(clamp(HEIGHT / BASE_HEIGHT, 1.0, self.ESCALA_MAXIMA))
         if self.show_credits:
             self._draw_credits(surface, renderer)
+        elif self.show_help:
+            self._draw_help(surface)
         else:
             self._draw_body_labels(surface, scene)
             if self.show_labels:
                 self._draw_labels(surface, scene)
             self._draw_main(surface, scene)
+            self._draw_focus_panel(surface, scene)
             self._draw_telescope(surface, scene, renderer)
+            if self.show_requisitos:
+                self._draw_requisitos(surface, scene)
             if self.show_debug:
                 self._draw_debug(surface, scene, renderer, desempenho)
+            self._draw_presentation(surface, scene)
         self._draw_notice(surface)
 
     AVISO_QUADROS = 120                  # cerca de 2 s a 60 FPS
@@ -3910,8 +4704,10 @@ class Hud:
         self._aviso_restante -= 1
         rotulo = self.txt(self.font_bold, self._aviso, True, HUD_ACCENT)
         x = (WIDTH - rotulo.get_width()) // 2
-        y = HEIGHT - self.FOOTER_HEIGHT - 52
-        self._panel(surface, (x - 12, y - 6, rotulo.get_width() + 24, rotulo.get_height() + 12))
+        y = HEIGHT - self.rodape - self.e(52)
+        self._panel_px(surface, (x - self.e(12), y - self.e(6),
+                                 rotulo.get_width() + self.e(24),
+                                 rotulo.get_height() + self.e(12)))
         surface.blit(rotulo, (x, y))
 
     def _draw_labels(self, surface, scene):
@@ -3926,11 +4722,12 @@ class Hud:
             if p is None or not (0 <= p[0] < WIDTH and 0 <= p[1] < HEIGHT):
                 continue
             rotulo = self.txt(self.font, texto, True, HUD_TXT)
-            x, y = p[0] + 16, p[1] - 28
-            pygame.draw.line(surface, HUD_DIM, p, (x - 4, y + rotulo.get_height() // 2), 1)
-            pygame.draw.circle(surface, HUD_ACCENT, p, 3)
-            surface.blit(self._camada(rotulo.get_width() + 8, rotulo.get_height() + 2,
-                                      HUD_BG, 170), (x - 4, y - 1))
+            x, y = p[0] + self.e(16), p[1] - self.e(28)
+            pygame.draw.line(surface, HUD_DIM, p, (x - self.e(4), y + rotulo.get_height() // 2), 1)
+            pygame.draw.circle(surface, HUD_ACCENT, p, self.e(3))
+            surface.blit(self._camada(rotulo.get_width() + self.e(8),
+                                      rotulo.get_height() + 2, HUD_BG, 170),
+                         (x - self.e(4), y - 1))
             surface.blit(rotulo, (x, y))
             desenhados += 1
         self.rotulos_desenhados = desenhados
@@ -3948,6 +4745,7 @@ class Hud:
             return
         limite = 4 if self.show_labels else 1
         ocupado = set()
+        celula_x, celula_y = self.e(24), self.e(14)
         for nome, malha, prioridade in sorted(scene.body_labels(), key=lambda r: r[2]):
             if prioridade > limite or not malha.visible:
                 continue
@@ -3961,13 +4759,164 @@ class Hud:
             cor = HUD_TXT if prioridade <= 1 else HUD_DIM
             fonte = self.font if prioridade == 0 else self.font_small
             rotulo = self.txt(fonte, nome, True, cor)
-            x0 = x + raio + 6
+            x0 = x + raio + self.e(6)
+            y0 = y - self.e(8)
             # o rótulo ocupa todas as células que a largura dele cobre
-            celulas = {(c, (y - 8) // 14) for c in range(x0 // 24, (x0 + rotulo.get_width()) // 24 + 1)}
+            celulas = {(c, y0 // celula_y)
+                       for c in range(x0 // celula_x, (x0 + rotulo.get_width()) // celula_x + 1)}
             if celulas & ocupado:
                 continue
             ocupado |= celulas
-            surface.blit(rotulo, (x0, y - 8))
+            surface.blit(rotulo, (x0, y0))
+        if not orbital:
+            return
+        for nome, pos in scene.cloud_labels():
+            v = cam.to_view(pos)
+            if v[2] < NEAR:
+                continue
+            x, y = project_view(v)
+            if 0 <= x < WIDTH and 0 <= y < HEIGHT:
+                pygame.draw.circle(surface, HUD_DIM, (x, y), self.e(2), 1)
+                surface.blit(self.txt(self.font_small, nome, True, HUD_DIM),
+                             (x + self.e(6), y - self.e(8)))
+
+    def _draw_presentation(self, surface, scene):
+        """Legenda do modo apresentação, centrada acima do rodapé."""
+        dados = scene.presentation_caption
+        if dados is None:
+            return
+        legenda, passo, total = dados
+        titulo = self.txt(self.font_bold, legenda, True, HUD_TXT)
+        rodape = self.txt(self.font_small, "Modo apresentação %d/%d — qualquer tecla encerra [F9]"
+                          % (passo, total), True, HUD_ACCENT)
+        largura = max(titulo.get_width(), rodape.get_width()) + self.e(36)
+        altura = titulo.get_height() + rodape.get_height() + self.e(18)
+        x = (WIDTH - largura) // 2
+        y = HEIGHT - self.rodape - self.e(30) - altura
+        self._panel_px(surface, (x, y, largura, altura), alpha=215)
+        surface.blit(titulo, (x + (largura - titulo.get_width()) // 2, y + self.e(7)))
+        surface.blit(rodape, (x + (largura - rodape.get_width()) // 2,
+                              y + self.e(11) + titulo.get_height()))
+
+    def _draw_help(self, surface):
+        """Tela de ajuda [F1]: todos os comandos, agrupados pelo que fazem."""
+        surface.blit(self._camada(WIDTH, HEIGHT, (5, 7, 12), 238), (0, 0))
+        colunas = (
+            ("Sequência de acoplamento", (
+                ("ESPAÇO", "iniciar, pausar, retomar; reinicia no fim"),
+                ("R", "volta ao estado inicial"),
+                ("1 2 3 4", "salta para o início de cada fase"),
+                ("+ / -", "velocidade da sequência, de 0,25x a 3x"),
+                ("L", "repete a sequência sem parar"),
+                ("O", "órbita de inspeção estendida (3 voltas)"),
+                ("T", "tour: uma câmera por fase"),
+            )),
+            ("Câmera e enquadramento", (
+                ("C W S A D", "câmeras; dentro da cabine viram pontos de vista"),
+                ("F", "foco animado no cargueiro"),
+                ("Z / X", "aproxima e afasta: da cabine ao Cinturão de Kuiper"),
+                ("P / Shift+P", "percorre corpos e naves, do Sol para fora"),
+                (", / .", "relógio orbital, de tempo real a 1 ano/s"),
+                ("F11", "tela cheia na resolução do monitor"),
+            )),
+            ("Cena e informação", (
+                ("B", "traçado das órbitas"),
+                ("N", "rótulos dos objetos"),
+                ("V", "fundo: estrelas reais, Webb ou Hubble"),
+                ("K", "olho do telescópio: vê pelo Webb e pelo Hubble"),
+                ("H", "painel de dados do pipeline e das órbitas"),
+                ("F1", "esta ajuda"),
+                ("F2", "modo avaliação: onde está cada requisito"),
+                ("F9", "modo apresentação automático"),
+                ("F12", "captura de tela em docs/img"),
+                ("TAB", "créditos"),
+                ("ESC", "encerrar"),
+            )),
+        )
+        x = max(self.e(40), WIDTH // 2 - self.e(500))
+        y = self.e(46)
+        surface.blit(self.txt(self.font_title, "COMANDOS — Estação Órbita-2", True, HUD_ACCENT),
+                     (x, y))
+        y += self.e(26)
+        surface.blit(self.txt(self.font, "Todas as teclas são comandos discretos: não há "
+                              "navegação livre nem mouse.", True, HUD_DIM), (x, y))
+        y += self.e(28)
+        topo = y
+        for i, (titulo, itens) in enumerate(colunas):
+            cx = x + i * self.e(330)
+            cy = topo
+            surface.blit(self.txt(self.font_bold, titulo, True, HUD_ACCENT), (cx, cy))
+            cy += self.e(24)
+            for tecla, texto in itens:
+                surface.blit(self.txt(self.font_bold, tecla, True, HUD_WARN), (cx, cy))
+                surface.blit(self.txt(self.font_small, texto, True, HUD_TXT),
+                             (cx + self.e(96), cy + self.e(2)))
+                cy += self.e(21)
+        surface.blit(self.txt(self.font_bold, "[F1] volta para a cena", True, HUD_WARN),
+                     (x, HEIGHT - self.e(40)))
+
+    def _draw_requisitos(self, surface, scene):
+        """
+        Modo avaliação [F2]: os dez requisitos obrigatórios do enunciado, onde
+        cada um aparece, e etiquetas presas aos objetos que os demonstram.
+        """
+        linhas = (
+            ("1", "janela, laço, FPS, Δt e encerramento", "App.run, F11, ESC"),
+            ("2", "≥3 primitivas", "polígonos, círculos, linhas, pontos, sprites e texto"),
+            ("3", "≥5 objetos, instâncias, simples e composto", "robôs MR-1..4, GPS, Terra, núcleo"),
+            ("4", "translação, rotação e escala", "cargueiro, juntas solares, órbitas reais"),
+            ("5", "câmera com ≥2 modos", "C W S A D, F, T, Z/X, P e a cabine"),
+            ("6", "≥3 animações", "acoplamento, comporta (FSM), robôs + sensor"),
+            ("7", "comandos discretos documentados", "F1 e o rodapé"),
+            ("8", "interface com estado e progresso", "painéis do HUD"),
+            ("9", "visibilidade por traçado de raio", "sensor, eclipse e Sol atrás da Terra"),
+            ("10", "créditos com equipe e referências", "TAB"),
+        )
+        largura = self.e(660)
+        altura = self.e(40) + len(linhas) * self.e(21)
+        x, y = (WIDTH - largura) // 2, self.e(90)
+        self._panel_px(surface, (x, y, largura, altura), alpha=228)
+        surface.blit(self.txt(self.font_bold, "MODO AVALIAÇÃO — requisitos obrigatórios do AP1",
+                              True, HUD_ACCENT), (x + self.e(14), y + self.e(10)))
+        cy = y + self.e(36)
+        for numero, requisito, onde in linhas:
+            surface.blit(self.txt(self.font_bold, numero.rjust(2), True, HUD_WARN),
+                         (x + self.e(14), cy))
+            surface.blit(self.txt(self.font_small, requisito, True, HUD_TXT), (x + self.e(42), cy))
+            surface.blit(self.txt(self.font_small, onde, True, HUD_DIM), (x + self.e(330), cy))
+            cy += self.e(21)
+        # etiquetas presas aos objetos que demonstram cada requisito
+        cam = scene.camera
+        etiquetas = [("REQ 3 · composto", scene.station.pos), ("REQ 3 · instância", scene.robots[0].pos),
+                     ("REQ 4 · escala e rotação", scene.cargo.pos),
+                     ("REQ 3 · sem partes", scene.earth.pos)]
+        if scene.sight:
+            etiquetas.append(("REQ 9 · linha de visão", scene.sight[0]["ponto"]))
+        for texto, pos in etiquetas:
+            p = project_point(pos, cam)
+            if p is None or not (0 <= p[0] < WIDTH and 0 <= p[1] < HEIGHT):
+                continue
+            rotulo = self.txt(self.font_small, texto, True, HUD_WARN)
+            surface.blit(self._camada(rotulo.get_width() + self.e(8), rotulo.get_height() + 2,
+                                      HUD_BG, 190), (p[0] + self.e(8), p[1] - self.e(4)))
+            surface.blit(rotulo, (p[0] + self.e(12), p[1] - self.e(3)))
+            pygame.draw.circle(surface, HUD_WARN, p, self.e(3), 1)
+
+    def _draw_focus_panel(self, surface, scene):
+        """Ficha do corpo em foco, abaixo do painel principal."""
+        linhas = scene.focus_data()
+        if not linhas:
+            return
+        rotulos = [self.txt(self.font_bold if titulo else self.font, texto, True,
+                            HUD_ACCENT if titulo else HUD_TXT) for texto, titulo in linhas]
+        largura = max(r.get_width() for r in rotulos) + self.e(24)
+        altura = self.e(12) + sum(r.get_height() + self.e(2) for r in rotulos)
+        x, y = self.e(18), self.e(192)
+        self._panel_px(surface, (x, y, largura, altura), alpha=198)
+        y += self.e(7)
+        for r in rotulos:
+            surface.blit(r, (x + self.e(12), y))
+            y += r.get_height() + self.e(2)
 
     FLASH_DECAIMENTO = 1.0 / 30.0        # cerca de meio segundo a 60 FPS
 
@@ -3992,25 +4941,24 @@ class Hud:
     def _draw_main(self, surface, scene):
         self._draw_phase_flash(surface, scene)
         self._panel(surface, (18, 14, 650, 168))
-        surface.blit(self.txt(self.font_title,
-            "ESTAÇÃO ÓRBITA-2  |  Acoplamento e Inspeção Orbital", True, HUD_TXT), (30, 22))
-        surface.blit(self.txt(self.font_bold,
-            "[%s]  %s" % (scene.state, scene.phase_label), True, HUD_ACCENT), (30, 47))
-        surface.blit(self.txt(self.font,
-            "Comporta: %-9s Balizas: %-6s Câmera: %s" % (
-                scene.door.state,
-                "VERDE" if scene.beacons.color == AlertBeacons.GREEN else "ÂMBAR",
-                scene.camera.name), True, HUD_TXT), (30, 68))
+        self._escrever(surface, self.font_title,
+                       "ESTAÇÃO ÓRBITA-2  |  Acoplamento e Inspeção Orbital", HUD_TXT, 30, 22)
+        self._escrever(surface, self.font_bold,
+                       "[%s]  %s" % (scene.state, scene.phase_label), HUD_ACCENT, 30, 47)
+        self._escrever(surface, self.font, "Comporta: %-9s Balizas: %-6s Câmera: %s" % (
+            scene.door.state,
+            "VERDE" if scene.beacons.color == AlertBeacons.GREEN else "ÂMBAR",
+            scene.camera.name), HUD_TXT, 30, 68)
         texto, cor = self._sensor_text(scene)
-        surface.blit(self.txt(self.font, texto, True, cor), (30, 88))
-        surface.blit(self.txt(self.font, self._modo_text(scene), True, HUD_DIM), (30, 106))
+        self._escrever(surface, self.font, texto, cor, 30, 88)
+        self._escrever(surface, self.font, self._modo_text(scene), HUD_DIM, 30, 106)
         foco = scene.focus_name
         enquadramento = ("Foco: %s [P]" % foco) if foco else scene.zoom_level["name"]
-        surface.blit(self.txt(self.font, "Enquadramento: %s   (escala real)" % enquadramento,
-                              True, HUD_DIM), (30, 124))
-        surface.blit(self.txt(self.font, "UTC %s   Relógio orbital: %s" % (
-            scene.utc.strftime("%d/%m/%Y %H:%M:%S"), scene.time_scale_label), True,
-            HUD_TXT if scene.time_scale == 1.0 else HUD_WARN), (30, 142))
+        self._escrever(surface, self.font, "Enquadramento: %s   (escala real)" % enquadramento,
+                       HUD_DIM, 30, 124)
+        self._escrever(surface, self.font, "UTC %s   Relógio orbital: %s" % (
+            scene.utc.strftime("%d/%m/%Y %H:%M:%S"), scene.time_scale_label),
+            HUD_TXT if scene.time_scale == 1.0 else HUD_WARN, 30, 142)
         self._draw_footer(surface, scene)
 
     @staticmethod
@@ -4082,44 +5030,46 @@ class Hud:
                 BACKDROP_NAMES[modo], renderer.backdrop_status.get(modo, "sem imagem")),
                 HUD_WARN, self.font_small))
         rotulos = [self.txt(fonte, texto, True, cor) for texto, cor, fonte in linhas]
-        largura = max(r.get_width() for r in rotulos) + 24
-        altura = 10 + sum(r.get_height() + 3 for r in rotulos)
-        x = WIDTH - 18 - largura
-        y = HEIGHT - self.FOOTER_HEIGHT - 14 - 10 - altura
-        self._panel(surface, (x, y, largura, altura), alpha=190)
-        y += 6
+        largura = max(r.get_width() for r in rotulos) + self.e(24)
+        altura = self.e(10) + sum(r.get_height() + self.e(3) for r in rotulos)
+        x = WIDTH - self.e(18) - largura
+        y = HEIGHT - self.rodape - self.e(24) - altura
+        self._panel_px(surface, (x, y, largura, altura), alpha=190)
+        y += self.e(6)
         for r in rotulos:
-            surface.blit(r, (x + 12, y))
-            y += r.get_height() + 3
+            surface.blit(r, (x + self.e(12), y))
+            y += r.get_height() + self.e(3)
 
     def _draw_footer(self, surface, scene):
         """Rodapé: comandos e indicador de progresso com as marcas das fases."""
-        alt = self.FOOTER_HEIGHT
-        topo = HEIGHT - alt - 14
-        self._panel(surface, (18, topo, WIDTH - 36, alt))
+        topo = HEIGHT - self.rodape - self.e(14)
+        self._panel_px(surface, (self.e(18), topo, WIDTH - self.e(36), self.rodape))
         linhas = (
             "[ESPAÇO] iniciar/pausar  [R] reiniciar  [1-4] fases  [C W S A D] câmeras  "
             "[F] foco  [T] tour  [L] repetir  [O] inspeção",
             "[Z/X] zoom  [P] corpo celeste  [,/.] relógio  [+/-] velocidade  [B] órbitas  "
-            "[N] rótulos  [V] fundo",
-            "[H] dados  [F11] tela cheia  [F12] captura  [TAB] créditos  [ESC] sair",
+            "[N] rótulos  [V] fundo  [K] olho do telescópio",
+            "[H] dados  [F1] ajuda  [F2] requisitos  [F9] apresentação  [F11] tela cheia  "
+            "[F12] captura  [TAB] créditos  [ESC] sair",
         )
         for i, texto in enumerate(linhas):
-            surface.blit(self.txt(self.font, texto, True, HUD_DIM), (32, topo + 6 + i * 17))
+            surface.blit(self.txt(self.font, texto, True, HUD_DIM),
+                         (self.e(32), topo + self.e(6 + i * 17)))
 
-        x, y, larg, esp = 32, topo + 64, WIDTH - 276, 11
-        pygame.draw.rect(surface, (26, 34, 46), (x, y, larg, esp), border_radius=3)
-        pygame.draw.rect(surface, HUD_ACCENT,
-                         (x, y, int(larg * scene.progress), esp), border_radius=3)
+        x, y = self.e(32), topo + self.e(64)
+        larg, esp = WIDTH - self.e(276), self.e(11)
+        pygame.draw.rect(surface, (26, 34, 46), (x, y, larg, esp), border_radius=self.e(3))
+        pygame.draw.rect(surface, HUD_ACCENT, (x, y, int(larg * scene.progress), esp),
+                         border_radius=self.e(3))
         for i, limite in enumerate(PHASE_BOUNDS[:-1]):
             mx = x + int(larg * limite / TOTAL_SEQUENCE_TIME)
             pygame.draw.line(surface, (132, 146, 166), (mx, y - 1), (mx, y + esp + 1), 1)
-            surface.blit(self.txt(self.font, str(i + 2), True, HUD_DIM), (mx + 3, y - 1))
+            surface.blit(self.txt(self.font, str(i + 2), True, HUD_DIM), (mx + self.e(3), y - 1))
         surface.blit(self.txt(self.font,
             "Fase %d/%d  %05.2fs/%.0fs  %3d%%" % (
                 scene.phase_index + 1, len(PHASE_BOUNDS), scene.sim_time,
                 TOTAL_SEQUENCE_TIME, int(scene.progress * 100)),
-            True, HUD_TXT), (x + larg + 14, y - 3))
+            True, HUD_TXT), (x + larg + self.e(14), y - self.e(3)))
 
     @staticmethod
     def _orbital_rows(scene):
@@ -4143,12 +5093,22 @@ class Hud:
         pontos = sum(len(n) for n in scene.clouds) + sum(len(n) for n in scene.satellite_clouds)
         linhas.append(("corpos %d  naves %d  pontos %d" % (len(scene.bodies),
                                                          len(scene.satellites), pontos), False))
+        passagem = scene.next_iss_pass()
+        if passagem is not None:
+            horas = (passagem[0] - scene.jd) * 24.0
+            quando = ("%.0f min" % (horas * 60.0)) if horas < 1.0 else ("%.1f h" % horas)
+            linhas.append(("ISS sobre %s em %s, %.0f graus" % (LOCAL_OBSERVADOR[0], quando,
+                                                              passagem[1]), False))
+        eclipse = scene.next_eclipse()
+        if eclipse is not None:
+            dias = eclipse[0] - scene.jd
+            quando = ("%.1f h" % (dias * 24.0)) if dias < 1.0 else ("%.0f dias" % dias)
+            linhas.append(("próximo eclipse %s em %s" % (eclipse[1], quando), False))
         if scene.satellite_data_date:
             linhas.append(("elementos CelesTrak  %s" % scene.satellite_data_date, False))
         return linhas
 
     def _draw_debug(self, surface, scene, renderer, desempenho=None):
-        cam = scene.camera
         if desempenho is None:
             fps_txt = cpu_txt = "medindo..."
         else:
@@ -4168,36 +5128,39 @@ class Hud:
             ("resolução / FOV ... %dx%d / %.0f" % (WIDTH, HEIGHT, FOV), False),
             ("", False),
         ] + self._orbital_rows(scene)
-        alt = 18 + len(linhas) * 17
-        self._panel(surface, (WIDTH - 316, 16, 298, alt))
+        alt = self.e(18) + len(linhas) * self.e(17)
+        largura = self.e(298)
+        x = WIDTH - self.e(18) - largura
+        self._panel_px(surface, (x, self.e(16), largura, alt))
         for i, (txt, titulo) in enumerate(linhas):
             cor = HUD_ACCENT if titulo else HUD_DIM
-            surface.blit(self.txt(self.font, txt, True, cor), (WIDTH - 302, 26 + i * 17))
+            surface.blit(self.txt(self.font, txt, True, cor),
+                         (x + self.e(14), self.e(26) + i * self.e(17)))
 
     def _draw_credits(self, surface, renderer=None):
         surface.blit(self._camada(WIDTH, HEIGHT, (5, 7, 12), 242), (0, 0))
-        esquerda = max(40, WIDTH // 2 - 520)
-        direita = esquerda + 510
-        y = 40
-        surface.blit(self.txt(self.font_title,
-            "CRÉDITOS - AP1 Computação Gráfica e RA/RV", True, HUD_ACCENT), (esquerda, y))
-        y += 32
-        surface.blit(self.txt(self.font_bold,
-            "Variação escolhida: Equipe 2 - Estação Espacial", True, HUD_TXT), (esquerda, y))
-        y += 20
+        esquerda = max(self.e(40), WIDTH // 2 - self.e(520))
+        direita = esquerda + self.e(510)
+        y = self.e(40)
+        surface.blit(self.txt(self.font_title, "CRÉDITOS - AP1 Computação Gráfica e RA/RV",
+                              True, HUD_ACCENT), (esquerda, y))
+        y += self.e(32)
+        surface.blit(self.txt(self.font_bold, "Variação escolhida: Equipe 2 - Estação Espacial",
+                              True, HUD_TXT), (esquerda, y))
+        y += self.e(20)
         surface.blit(self.txt(self.font,
             "Acoplamento de módulos, trajetória orbital de robôs, comporta com "
             "estados e alerta sequencial.", True, HUD_DIM), (esquerda, y))
 
-        topo = y + 34
+        topo = y + self.e(34)
 
         def bloco(x, y, titulo, itens, cor):
             surface.blit(self.txt(self.font_bold, titulo, True, HUD_ACCENT), (x, y))
-            y += 22
+            y += self.e(22)
             for item in itens:
-                surface.blit(self.txt(self.font, item, True, cor), (x + 12, y))
-                y += 19
-            return y + 14
+                surface.blit(self.txt(self.font, item, True, cor), (x + self.e(12), y))
+                y += self.e(19)
+            return y + self.e(14)
 
         y = bloco(esquerda, topo, "Equipe e contribuições",
                   ["%-16s %-8s %s" % (nome, ra, papel) for nome, ra, papel in TEAM], HUD_TXT)
@@ -4212,8 +5175,8 @@ class Hud:
                   [_cortar(info["titulo"], 58), _cortar("Crédito: " + info["credito"], 58),
                    _cortar(info["pagina"], 58)], HUD_TXT)
 
-        surface.blit(self.txt(self.font_bold,
-            "[TAB] volta para a cena", True, HUD_WARN), (esquerda, HEIGHT - 40))
+        surface.blit(self.txt(self.font_bold, "[TAB] volta para a cena", True, HUD_WARN),
+                     (esquerda, HEIGHT - self.e(40)))
 
 
 # ============================================================
@@ -4273,6 +5236,7 @@ class App:
         self._soma_ms = 0.0
         self._quadros = 0
         self._fundo_escolhido = False
+        self._alvo_pedido = None
         self.tasks = fontes_online.Tarefas()
         self.online = (surface is None) if online is None else online
         if tela_cheia:
@@ -4323,6 +5287,31 @@ class App:
         situacao, valor = self.tasks.consumir("jwst")
         if situacao == "pronto":
             self.scene.update_jwst(valor)
+        self._poll_alvo_do_webb()
+
+    def _poll_alvo_do_webb(self):
+        """
+        Resolve em coordenadas o alvo que a agenda diz que o Webb observa agora,
+        para a nave apontar de verdade. O nome muda a cada poucas horas; cada um
+        é resolvido uma vez e fica no cache em disco.
+        """
+        situacao, valor = self.tasks.consumir("alvo-webb")
+        if situacao == "pronto":
+            ra, dec = valor
+            cd = math.cos(math.radians(dec))
+            direcao = ef.direcao_para_mundo(ef.equatorial_para_ecliptica(
+                (cd * math.cos(math.radians(ra)), cd * math.sin(math.radians(ra)),
+                 math.sin(math.radians(dec)))))
+            self.scene.aim_webb(direcao)
+            self.hud.notify("James Webb apontado para %s" % self._alvo_pedido)
+        if not self.online or not self.renderer.schedule:
+            return
+        visita, _situacao = fontes_online.observacao_em(self.renderer.schedule,
+                                                        datetime.now(timezone.utc))
+        alvo = visita["alvo"] if visita else None
+        if alvo and alvo != self._alvo_pedido:
+            self._alvo_pedido = alvo
+            self.tasks.iniciar("alvo-webb", fontes_online.resolver_alvo, alvo)
 
     # -- tela cheia -------------------------------------------------------------
     def toggle_fullscreen(self):
@@ -4350,8 +5339,19 @@ class App:
             return
         if event.key in CAMERA_KEYS or event.key == pygame.K_f:
             self.scene.tour = False            # o comando manual de câmera vence o tour
+        if event.key not in (pygame.K_F9, pygame.K_ESCAPE, pygame.K_F12, pygame.K_F1):
+            # o roteiro automático cede o lugar assim que alguém toca no teclado
+            if self.scene.presentation is not None:
+                self.scene.toggle_presentation()
         if event.key == pygame.K_ESCAPE:
             self.running = False
+        elif event.key == pygame.K_F9:
+            ligado = self.scene.toggle_presentation()
+            self.hud.notify("Modo apresentação %s" % ("ligado" if ligado else "encerrado"))
+        elif event.key == pygame.K_F1:
+            self.hud.show_help = not self.hud.show_help
+        elif event.key == pygame.K_F2:
+            self.hud.show_requisitos = not self.hud.show_requisitos
         elif event.key == pygame.K_F11:
             self.toggle_fullscreen()
         elif event.key == pygame.K_t:
@@ -4385,6 +5385,9 @@ class App:
         elif event.key in TIME_DOWN_KEYS:
             self.scene.change_time_scale(-1)
             self.hud.notify("Relógio orbital: %s" % self.scene.time_scale_label)
+        elif event.key == pygame.K_k:
+            nave = self.scene.cycle_telescope_eye()
+            self.hud.notify("Olho do telescópio: %s" % (nave or "desligado"))
         elif event.key == pygame.K_v:
             self._fundo_escolhido = True
             modo = self.renderer.cycle_backdrop()

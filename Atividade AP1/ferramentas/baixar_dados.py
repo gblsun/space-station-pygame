@@ -250,6 +250,7 @@ MAPAS = (
     ("sol", "2k_sun.jpg", (512, 256)), ("mercurio", "2k_mercury.jpg", (512, 256)),
     ("venus", "2k_venus_atmosphere.jpg", (512, 256)),
     ("terra", "2k_earth_daymap.jpg", (1024, 512)), ("nuvens", "2k_earth_clouds.jpg", (512, 256)),
+    ("noite", "2k_earth_nightmap.jpg", (1024, 512)),
     ("lua", "2k_moon.jpg", (512, 256)), ("marte", "2k_mars.jpg", (512, 256)),
     ("jupiter", "2k_jupiter.jpg", (512, 256)), ("saturno", "2k_saturn.jpg", (512, 256)),
     ("aneis_saturno", "2k_saturn_ring_alpha.png", (512, 16)),

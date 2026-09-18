@@ -486,6 +486,39 @@ def na_sombra_da_terra(ponto_km, terra_km, raio=6371.0):
     return min(1.0, (raio - desvio) / (raio * 0.08))    # penumbra na borda
 
 
+def posicao_observador(lat, lon, altitude_km, jd):
+    """
+    Posição de um observador na superfície, geocêntrica e eclíptica J2000. A
+    longitude gira com a Terra: o ângulo do meridiano principal vem dos mesmos
+    elementos IAU que orientam o planeta na cena.
+    """
+    alpha0, delta0, w0, taxa = ROTACAO_IAU["Terra"]
+    x_b, y_b, z_b = eixos_iau(alpha0, delta0, w0 + taxa * (jd - JD_J2000))
+    r = RAIO_TERRA_EQ + altitude_km
+    la, lo = math.radians(lat), math.radians(lon)
+    cl = math.cos(la)
+    # x_b aponta para a longitude 0, y_b para 90° leste, z_b para o polo
+    return (r * (cl * math.cos(lo) * x_b[0] + cl * math.sin(lo) * y_b[0] + math.sin(la) * z_b[0]),
+            r * (cl * math.cos(lo) * x_b[1] + cl * math.sin(lo) * y_b[1] + math.sin(la) * z_b[1]),
+            r * (cl * math.cos(lo) * x_b[2] + cl * math.sin(lo) * y_b[2] + math.sin(la) * z_b[2]))
+
+
+def elevacao_topocentrica(satelite_geo_km, lat, lon, altitude_km, jd):
+    """Altura do satélite acima do horizonte do observador, em graus."""
+    observador = posicao_observador(lat, lon, altitude_km, jd)
+    rel = (satelite_geo_km[0] - observador[0], satelite_geo_km[1] - observador[1],
+           satelite_geo_km[2] - observador[2])
+    d = math.sqrt(_dot(rel, rel))
+    if d < 1e-6:
+        return 90.0
+    zenite = _norm(observador)
+    return math.degrees(math.asin(clamp_unit(_dot(rel, zenite) / d)))
+
+
+def clamp_unit(v):
+    return -1.0 if v < -1.0 else (1.0 if v > 1.0 else v)
+
+
 # ============================================================
 # 7. POSIÇÕES TABELADAS (Horizons) E O PONTO L2
 # ============================================================

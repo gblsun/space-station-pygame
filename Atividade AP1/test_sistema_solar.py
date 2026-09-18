@@ -413,5 +413,69 @@ class TestCacheETarefas(unittest.TestCase):
         self.assertIn("sem rede", mensagem)
 
 
+
+class TestObservadorEAlvo(unittest.TestCase):
+
+    def setUp(self):
+        """Cache próprio: o teste não pode depender do que já foi baixado nesta máquina."""
+        self.pasta = tempfile.TemporaryDirectory()
+        self.antigo = os.environ.get("LOCALAPPDATA")
+        os.environ["LOCALAPPDATA"] = self.pasta.name
+
+    def tearDown(self):
+        if self.antigo is None:
+            os.environ.pop("LOCALAPPDATA", None)
+        else:
+            os.environ["LOCALAPPDATA"] = self.antigo
+        self.pasta.cleanup()
+
+    def test_observador_fica_na_superficie_e_gira_com_a_terra(self):
+        jd = JD_REFERENCIA
+        p0 = ef.posicao_observador(-23.55, -46.63, 0.76, jd)
+        self.assertAlmostEqual(comprimento(p0), ef.RAIO_TERRA_EQ + 0.76, delta=0.01)
+        # meia volta depois, o observador está do outro lado do eixo: o ângulo
+        # entre as duas posições é 180° menos duas vezes a latitude
+        p12 = ef.posicao_observador(-23.55, -46.63, 0.76, jd + 0.5)
+        self.assertAlmostEqual(angulo(p0, p12), 180.0 - 2 * 23.55, delta=1.5)
+        no_equador = (ef.posicao_observador(0.0, 0.0, 0.0, jd),
+                      ef.posicao_observador(0.0, 0.0, 0.0, jd + 0.5))
+        self.assertGreater(angulo(*no_equador), 178.0)
+
+    def test_latitude_define_a_altura_em_relacao_ao_equador(self):
+        jd = JD_REFERENCIA
+        polo = ef.posicao_observador(90.0, 0.0, 0.0, jd)
+        equador = ef.posicao_observador(0.0, 0.0, 0.0, jd)
+        eixo = ef.eixos_iau(*ef.ROTACAO_IAU["Terra"][:2], 0.0)[2]
+        self.assertGreater(abs(sum(a * b for a, b in zip(ef._norm(polo), eixo))), 0.999)
+        self.assertLess(abs(sum(a * b for a, b in zip(ef._norm(equador), eixo))), 0.001)
+
+    def test_elevacao_no_zenite_e_no_horizonte(self):
+        jd = JD_REFERENCIA
+        obs = ef.posicao_observador(0.0, 0.0, 0.0, jd)
+        zenite = [c * 1.06 for c in obs]                 # 400 km acima da cabeça
+        self.assertAlmostEqual(ef.elevacao_topocentrica(zenite, 0.0, 0.0, 0.0, jd), 90.0, places=3)
+        lado = ef.posicao_observador(0.0, 90.0, 0.0, jd)
+        self.assertLess(ef.elevacao_topocentrica(lado, 0.0, 0.0, 0.0, jd), 1.0)
+
+    def test_resolver_alvo_limpa_os_prefixos_do_stsci(self):
+        chamadas = []
+
+        def falso_baixar(url):
+            chamadas.append(url)
+            if "NGC" in url:
+                return b"%J 308.718 60.153 = ...\n"
+            raise fo.ErroDeFonte("sem resultado")
+
+        original = fo.baixar
+        fo.baixar = falso_baixar
+        try:
+            ra, dec = fo.resolver_alvo("NAME-NGC-6946")
+        finally:
+            fo.baixar = original
+        self.assertAlmostEqual(ra, 308.718, places=3)
+        self.assertAlmostEqual(dec, 60.153, places=3)
+        self.assertTrue(any("NGC" in c for c in chamadas))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
